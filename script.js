@@ -266,8 +266,11 @@ async function processReceiptWithGemini() {
     const mimeType = selectedImageBase64.split(";")[0].split(":")[1];
 
     const apiKey = typeof CONFIG !== "undefined" ? CONFIG.GEMINI_API_KEY : "";
-    if (!apiKey || apiKey === "GEMINI_API_KEY") {
-      throw new Error("No se encontró una API Key válida");
+
+    if (!apiKey || apiKey === "TU_GEMINI_API_KEY") {
+      throw new Error(
+        "No se encontró una API Key válida configurada en config.js",
+      );
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
