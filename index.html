@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compara Precios</title>
+
+    <!-- Enlace a la hoja de estilos personalizada -->
+    <link rel="stylesheet" href="styles.css" />
+
+    <!-- CDN de FontAwesome para iconos profesionales -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#0d3b66" />
+
+    <!-- CDN de Fuse.js para el Fuzzy Matching (Coincidencia aproximada de productos) -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+
+    <!-- CDN de Firebase (App, Auth y Firestore) versión compat para facilitar integración -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  </head>
+  <body>
+    <!-- ========================================== -->
+    <!-- 1. POP-UP REGIONAL INICIAL (PAÍS Y MONEDA) -->
+    <!-- ========================================== -->
+    <div id="regional-modal" class="modal-overlay">
+      <div class="modal-content 3d-card">
+        <div class="modal-header">
+          <i class="fa-solid fa-earth-americas modal-icon"></i>
+          <h2>Bienvenido a Compara Precios</h2>
+        </div>
+        <p>
+          Selecciona tu ubicación y moneda local para optimizar tu experiencia
+          de ahorro.
+        </p>
+
+        <form id="regional-form">
+          <div class="form-group">
+            <label for="select-country">País:</label>
+            <select id="select-country" required>
+              <option value="" disabled selected>Selecciona tu país</option>
+              <option value="VE">Venezuela</option>
+              <option value="CO">Colombia</option>
+              <option value="AR">Argentina</option>
+              <option value="CL">Chile</option>
+              <option value="MX">México</option>
+              <option value="PE">Perú</option>
+              <option value="ES">España</option>
+              <option value="US">Estados Unidos</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="select-currency">Moneda Local:</label>
+            <select id="select-currency" required>
+              <option value="" disabled selected>Selecciona la moneda</option>
+              <option value="VES">Bolívar (VES - Bs.)</option>
+              <option value="USD">Dólar Estadounidense (USD - $)</option>
+              <option value="EUR">Euro (EUR - €)</option>
+              <option value="COP">Peso Colombiano (COP - $)</option>
+              <option value="ARS">Peso Argentino (ARS - $)</option>
+              <option value="CLP">Peso Chileno (CLP - $)</option>
+              <option value="MXN">Peso Mexicano (MXN - $)</option>
+              <option value="PEN">Sol Peruano (PEN - S/)</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn-3d primary-btn">
+            Guardar y Comenzar
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. HEADER / BARRA SUPERIOR (LOGO CLICABLE) -->
+    <!-- ========================================== -->
+    <header class="app-header">
+      <div
+        class="logo-container"
+        onclick="switchView('home')"
+        style="cursor: pointer"
+        title="Ir al inicio"
+      >
+        <img
+          src="assets/logo_compara_precios.png"
+          alt="Logo Compara Precios"
+          class="app-logo"
+        />
+        <h1>Compara Precios</h1>
+      </div>
+      <div
+        class="user-location-badge"
+        id="btn-change-region"
+        title="Cambiar región"
+      >
+        <i class="fa-solid fa-location-dot"></i>
+        <span id="display-location">Maracay, VE</span>
+      </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- 3. CONTENEDOR PRINCIPAL DE VISTAS (SPA)    -->
+    <!-- ========================================== -->
+    <main class="app-main-container">
+      <!-- VISTA 1: DASHBOARD / INICIO -->
+      <section id="view-home" class="app-view active-view">
+        <div class="welcome-banner card-3d">
+          <h2>¡Ahorra en cada compra!</h2>
+          <p>
+            Sube tus recibos o crea listas inteligentes para saber dónde rinde
+            más tu dinero.
+          </p>
+        </div>
+
+        <div class="dashboard-grid">
+          <button class="dash-card card-3d" onclick="switchView('scan')">
+            <i class="fa-solid fa-camera-retro"></i>
+            <span>Escanear Recibo</span>
+          </button>
+          <button class="dash-card card-3d" onclick="switchView('list')">
+            <i class="fa-solid fa-list-check"></i>
+            <span>Lista Inteligente</span>
+          </button>
+          <button class="dash-card card-3d" onclick="switchView('search')">
+            <i class="fa-solid fa-magnifying-glass-dollar"></i>
+            <span>Consultar Precios</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- VISTA 2: ESCANEAR RECIBO CON IA (GEMINI) -->
+      <section id="view-scan" class="app-view">
+        <div class="view-header-action" style="margin-bottom: 1rem">
+          <button onclick="switchView('home')" class="btn-back">
+            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+          </button>
+        </div>
+
+        <h2>Escanear Recibo de Compra</h2>
+        <p class="section-subtitle">
+          Toma una foto clara de tu ticket o cárgala desde tu galería.
+        </p>
+
+        <div class="upload-zone card-3d">
+          <input
+            type="file"
+            id="receipt-file-input"
+            accept="image/*"
+            capture="environment"
+            hidden
+          />
+          <div
+            class="upload-trigger"
+            onclick="document.getElementById('receipt-file-input').click()"
+          >
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <p>Pulsa aquí para tomar o cargar foto</p>
+          </div>
+          <div id="image-preview-container" class="hidden">
+            <img id="receipt-preview" alt="Vista previa del recibo" />
+            <button id="btn-remove-image" class="btn-secondary">
+              Cambiar foto
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-process-receipt" class="btn-3d primary-btn" disabled>
+          <i class="fa-solid fa-brain"></i> Analizar Recibo con IA
+        </button>
+      </section>
+
+      <!-- VISTA 3: TICKETS PARALELOS (COMPARACIÓN) -->
+      <section id="view-compare" class="app-view">
+        <h2>Resultado de Comparación</h2>
+        <div class="tickets-container">
+          <!-- Lado Izquierdo: Tu Recibo Real -->
+          <div class="ticket-box card-3d">
+            <h3>Tu Recibo Actual</h3>
+            <div id="left-ticket-content" class="ticket-receipt-body">
+              <!-- Se llena dinámicamente con JS -->
+            </div>
+          </div>
+
+          <!-- Lado Derecho: Recibo Optimizado -->
+          <div class="ticket-box card-3d highlight-ticket">
+            <h3>Mejor Opción (Último Mes)</h3>
+            <div id="right-ticket-content" class="ticket-receipt-body">
+              <!-- Se llena dinámicamente con JS -->
+            </div>
+          </div>
+        </div>
+        <button class="btn-3d secondary-btn" onclick="switchView('home')">
+          Volver al Inicio
+        </button>
+      </section>
+
+      <!-- VISTA 4: LISTA DE COMPRAS INTELIGENTE -->
+      <section id="view-list" class="app-view">
+        <div class="view-header-action" style="margin-bottom: 1rem">
+          <button onclick="switchView('home')" class="btn-back">
+            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+          </button>
+        </div>
+
+        <h2>Mi Lista de Compras Inteligente</h2>
+        <p class="section-subtitle">
+          Agrega los productos que necesitas y te diremos dónde comprarlos más
+          barato.
+        </p>
+
+        <div class="shopping-input-group">
+          <input
+            type="text"
+            id="shopping-item-input"
+            placeholder="Ej: 1 kg de Azúcar, Leche..."
+          />
+          <button id="btn-add-shopping-item" class="btn-3d primary-btn">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+
+        <ul id="shopping-list-items" class="shopping-list-ul">
+          <!-- Ítems dinámicos -->
+        </ul>
+
+        <button id="btn-optimize-list" class="btn-3d success-btn hidden">
+          Optimizar mi Lista de Compras
+        </button>
+
+        <!-- Contenedor separado para tarjetas individuales de resultados -->
+        <div id="optimization-result-container"></div>
+      </section>
+
+      <!-- VISTA 5: BUSCADOR DE PRECIOS UNITARIOS -->
+      <section id="view-search" class="app-view">
+        <div class="view-header-action" style="margin-bottom: 1rem">
+          <button onclick="switchView('home')" class="btn-back">
+            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+          </button>
+        </div>
+
+        <h2>Consultar Precios en la Ciudad</h2>
+        <div class="search-filters card-3d">
+          <input
+            type="text"
+            id="product-search-input"
+            placeholder="¿Qué producto buscas? (Ej: Harina)"
+          />
+          <div class="filter-row">
+            <select id="filter-area">
+              <option value="city">Mi Ciudad</option>
+              <option value="state">Mi Estado / Provincia</option>
+              <option value="country">Todo el País</option>
+            </select>
+            <select id="filter-time">
+              <option value="30">Último Mes</option>
+              <option value="90">Últimos 3 Meses</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="search-results-container" class="search-results-list">
+          <!-- Resultados de búsqueda -->
+        </div>
+      </section>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- 4. MENÚ DE NAVEGACIÓN INFERIOR (PWA NATIVE)  -->
+    <!-- ========================================== -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchView('home')">
+        <i class="fa-solid fa-house"></i>
+        <span>Inicio</span>
+      </button>
+      <button class="nav-item" onclick="switchView('scan')">
+        <i class="fa-solid fa-camera"></i>
+        <span>Escanear</span>
+      </button>
+      <button class="nav-item" onclick="switchView('list')">
+        <i class="fa-solid fa-list-check"></i>
+        <span>Listas</span>
+      </button>
+      <button class="nav-item" onclick="switchView('search')">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span>Buscar</span>
+      </button>
+    </nav>
+
+    <!-- POP-UP CONDICIONAL DE AHORRO / COMPARACIÓN -->
+    <div id="alert-modal" class="modal-overlay hidden">
+      <div class="modal-content card-3d alert-content">
+        <div id="alert-icon-container">
+          <i class="fa-solid fa-circle-check success-icon"></i>
+        </div>
+        <h3 id="alert-title">¡Excelente!</h3>
+        <p id="alert-message">
+          Estás comprando en el lugar con mejores precios de la ciudad.
+        </p>
+        <button class="btn-3d primary-btn" onclick="closeAlertModal()">
+          Entendido
+        </button>
+      </div>
+    </div>
+
+    <!-- Scripts externos y lógica -->
+    <script src="utils.js"></script>
+    <script src="catalog-data.js"></script>
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
