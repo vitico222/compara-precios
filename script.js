@@ -273,29 +273,31 @@ async function processReceiptWithGemini() {
       );
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Endpoint oficial de la Interactions API
+    const url = `https://generativelanguage.googleapis.com/v1beta/interactions`;
 
     const promptPayload = {
-      contents: [
+      model: "gemini-3.8-flash",
+      input: [
         {
-          parts: [
-            {
-              text: "Analiza esta imagen de un recibo de supermercado. Extrae la información en un formato JSON estricto sin formato Markdown, ni bloques ```json. Usa exactamente las siguientes claves: 'establishment' (string con el nombre del comercio), 'date' (string en formato YYYY-MM-DD), 'items' (array de objetos, donde cada objeto contiene 'name' como string y 'price' como número), y 'total' (número total). No incluyas explicaciones adicionales.",
-            },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: base64Data,
-              },
-            },
-          ],
+          type: "text",
+          text: "Analiza esta imagen de un recibo de supermercado. Extrae la información en un formato JSON estricto sin formato Markdown, ni bloques ```json. Usa exactamente las siguientes claves: 'establishment' (string con el nombre del comercio), 'date' (string en formato YYYY-MM-DD), 'items' (array de objetos, donde cada objeto contiene 'name' como string y 'price' como número), y 'total' (número total). No incluyas explicaciones adicionales.",
+        },
+        {
+          type: "image",
+          data: base64Data,
+          mime_type: mimeType,
         },
       ],
     };
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+        "Api-Revision": "2026-05-20",
+      },
       body: JSON.stringify(promptPayload),
     });
 
@@ -307,13 +309,23 @@ async function processReceiptWithGemini() {
     }
 
     const result = await response.json();
-    if (!result.candidates || !result.candidates[0].content) {
+
+    let textResponse = "";
+    if (result.steps && Array.isArray(result.steps)) {
+      const outputStep = result.steps.find(
+        (step) => step.type === "model_output",
+      );
+      if (outputStep && outputStep.content && outputStep.content[0]) {
+        textResponse = outputStep.content[0].text;
+      }
+    }
+
+    if (!textResponse) {
       throw new Error(
-        "La API no devolvió una respuesta válida para la imagen cargada.",
+        "La API no devolvió una respuesta de texto válida para la imagen cargada.",
       );
     }
 
-    const textResponse = result.candidates[0].content.parts[0].text;
     const cleanJsonString = textResponse
       .replace(/```json/g, "")
       .replace(/```/g, "")
