@@ -1,8 +1,14 @@
 /* ========================================== */
+/* SCRIPT.JS - COMPARA PRECIOS                */
+/* ========================================== */
+"use strict";
+
+/* ========================================== */
 /* 1. CONFIGURACIÓN Y ESTADO GLOBAL           */
 /* ========================================== */
 
-// Configuración de Firebase
+// Esta configuración de Firebase es pública por diseño. Lo que protege tus datos
+// son las reglas de Firestore (firestore.rules) y las restricciones de la clave.
 const firebaseConfig = {
   apiKey: "AIzaSyB31p33QzBjnxIr_1biHrKNLJUxNNXyxAM",
   authDomain: "compara-precios-b1830.firebaseapp.com",
@@ -12,679 +18,1161 @@ const firebaseConfig = {
   appId: "1:516658074463:web:f1cd38fc50bc9a8ae1dcea",
 };
 
-// Inicializar Firebase
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+const SETTINGS = {
+  analyzeEndpoint: "/.netlify/functions/analyze-receipt",
+  maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
+  jpegQuality: 0.8,
+  fuseThreshold: 0.35,
+  listFuseThreshold: 0.45,
+  maxItemsPerReceipt: 80,
+  maxOffersPerQuery: 300,
+  searchDebounceMs: 350,
+  compareDays: 30,
+};
+
+const STORAGE = {
+  country: "cp_country",
+  state: "cp_state",
+  city: "cp_city",
+  currency: "cp_currency",
+  locationName: "cp_location_name",
+  shoppingList: "cp_shopping_list",
+};
+
+const SCOPE_LABELS = {
+  city: "en tu ciudad",
+  state: "en tu estado",
+  country: "en tu país",
+};
+
+const VALID_VIEWS = ["home", "scan", "compare", "list", "search"];
+
+/* ========================================== */
+/* 2. UTILIDADES                              */
+/* ========================================== */
+const $ = (id) => document.getElementById(id);
+
+function storageGet(key, fallback = "") {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value;
+  } catch {
+    return fallback;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* almacenamiento no disponible: la app sigue funcionando */
+  }
+}
+
+function loadShoppingList() {
+  try {
+    const parsed = JSON.parse(storageGet(STORAGE.shoppingList, "[]"));
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => typeof item === "string").slice(0, 100)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 // Estado global de la aplicación
 const AppState = {
-  country: localStorage.getItem("cp_country") || "",
-  currency: localStorage.getItem("cp_currency") || "",
-  locationName: localStorage.getItem("cp_location_name") || "Maracay, VE",
+  country: storageGet(STORAGE.country),
+  state: storageGet(STORAGE.state),
+  city: storageGet(STORAGE.city),
+  currency: storageGet(STORAGE.currency),
+  locationName: storageGet(STORAGE.locationName),
   currentReceiptData: null,
-  shoppingList: [],
+  shoppingList: loadShoppingList(),
 };
 
-let standardProductCatalog = [];
-
-/* ========================================== */
-/* FASE 2: GESTIÓN Y CARGA DEL CATÁLOGO       */
-/* ========================================== */
-
-async function loadStandardCatalogFromFirestore() {
-  try {
-    const snapshot = await db.collection("standard_catalog").get();
-    if (!snapshot.empty) {
-      standardProductCatalog = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      console.log(
-        `Catálogo estándar cargado desde Firestore: ${standardProductCatalog.length} productos.`,
-      );
-    } else {
-      console.log("Firestore vacío. Sembrando los productos iniciales...");
-      await seedLargeCatalogToFirestore();
-    }
-  } catch (error) {
-    console.log("Usando catálogo local por defecto:", error);
-    if (typeof initialCatalogData !== "undefined") {
-      standardProductCatalog = initialCatalogData;
-    }
-  }
+function escapeHtml(value) {
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => map[ch]);
 }
 
-async function seedLargeCatalogToFirestore() {
-  try {
-    if (typeof initialCatalogData === "undefined") return;
-    const batch = db.batch();
-    initialCatalogData.forEach((product) => {
-      const docRef = db.collection("standard_catalog").doc(product.id);
-      batch.set(docRef, {
-        name: product.name,
-        category: product.category,
-        keywords: product.keywords,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+// Convierte "1.234,56", "1,234.56", "12,5" o 12.5 en un número (o null)
+function toNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  let s = value.replace(/[^\d.,-]/g, "");
+  if (!s) return null;
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma > -1 && lastDot > -1) {
+    s =
+      lastComma > lastDot
+        ? s.replace(/\./g, "").replace(",", ".")
+        : s.replace(/,/g, "");
+  } else if (lastComma > -1) {
+    s = s.match(/,/g).length > 1 ? s.replace(/,/g, "") : s.replace(",", ".");
+  } else if (lastDot > -1 && s.match(/\./g).length > 1) {
+    s = s.replace(/\./g, "");
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+const round2 = (n) => Math.round(n * 100) / 100;
+const formatMoney = (n) => `${Number(n).toFixed(2)} ${AppState.currency}`;
+const formatQuantity = (q) => String(Number(Number(q).toFixed(3)));
+
+function normalizePlace(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function todayIso() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function daysAgoIso(days) {
+  return new Date(Date.now() - days * 86400000).toISOString().split("T")[0];
+}
+
+let toastTimer = null;
+function showToast(message) {
+  const el = $("toast");
+  if (!el) return;
+  el.textContent = message;
+  el.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add("hidden"), 3500);
+}
+
+function setScanStatus(message, isError = false) {
+  const el = $("scan-status");
+  if (!el) return;
+  if (!message) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    return;
+  }
+  el.textContent = message;
+  el.classList.toggle("error", isError);
+  el.classList.remove("hidden");
+}
+
+/* ========================================== */
+/* 3. AUTENTICACIÓN ANÓNIMA                   */
+/* ========================================== */
+// Las reglas de Firestore exigen un usuario autenticado. Entramos de forma
+// anónima: no se pide correo ni se guardan datos personales.
+let authReadyPromise = null;
+
+function ensureAuth() {
+  if (!authReadyPromise) {
+    authReadyPromise = new Promise((resolve) => {
+      const unsubscribe = auth.onAuthStateChanged(async (user) => {
+        if (user) {
+          unsubscribe();
+          resolve(user);
+          return;
+        }
+        try {
+          const credential = await auth.signInAnonymously();
+          unsubscribe();
+          resolve(credential.user);
+        } catch (error) {
+          console.warn(
+            "No se pudo iniciar sesión anónima (¿está activada en Firebase Authentication?):",
+            error,
+          );
+          unsubscribe();
+          resolve(null);
+        }
       });
     });
-    await batch.commit();
-    standardProductCatalog = initialCatalogData;
-    console.log("¡Catálogo masivo sembrado en Firestore exitosamente!");
-  } catch (e) {
-    console.error("Error al sembrar el catálogo masivo:", e);
   }
+  return authReadyPromise;
 }
 
-// Configuración de Fuse.js para coincidencia aproximada
+/* ========================================== */
+/* 4. CATÁLOGO Y COINCIDENCIA APROXIMADA      */
+/* ========================================== */
+// El catálogo se lee del archivo local catalog-data.js: es rápido, gratis y no
+// necesita escribir en Firestore. Los precios se agrupan por nombre estándar.
+let standardProductCatalog = [];
+let catalogFuse = null;
+
 const fuseOptions = {
-  keys: ["name", "keywords"],
-  threshold: 0.35,
+  keys: [
+    { name: "name", weight: 0.7 },
+    { name: "keywords", weight: 0.3 },
+  ],
+  threshold: SETTINGS.fuseThreshold,
   includeScore: true,
+  ignoreLocation: true,
 };
 
-function matchProductWithCatalog(rawProductName) {
-  const cleanName =
-    typeof normalizeProductName === "function"
-      ? normalizeProductName(rawProductName)
-      : rawProductName.toLowerCase().trim();
+function loadStandardCatalog() {
+  standardProductCatalog =
+    typeof initialCatalogData !== "undefined" ? initialCatalogData : [];
+  catalogFuse =
+    typeof Fuse !== "undefined"
+      ? new Fuse(standardProductCatalog, fuseOptions)
+      : null;
+}
 
+function normalizeName(rawName) {
+  return typeof normalizeProductName === "function"
+    ? normalizeProductName(rawName)
+    : normalizePlace(rawName);
+}
+
+function matchProductWithCatalog(
+  rawProductName,
+  threshold = SETTINGS.fuseThreshold,
+) {
+  const cleanName = normalizeName(rawProductName);
   if (!cleanName) {
     return { matched: false, cleanedName: "", originalName: rawProductName };
   }
-
-  const fuse = new Fuse(standardProductCatalog, fuseOptions);
-  const results = fuse.search(cleanName);
-
-  if (results.length > 0 && results[0].score <= 0.35) {
+  const results = catalogFuse
+    ? catalogFuse.search(cleanName, { limit: 1 })
+    : [];
+  if (results.length > 0 && results[0].score <= threshold) {
     return {
       matched: true,
       product: results[0].item,
       score: results[0].score,
       originalName: rawProductName,
     };
-  } else {
-    return {
-      matched: false,
-      cleanedName: cleanName,
-      originalName: rawProductName,
-    };
   }
+  return {
+    matched: false,
+    cleanedName: cleanName,
+    originalName: rawProductName,
+  };
 }
 
 /* ========================================== */
-/* 2. INICIALIZACIÓN Y EVENTOS AL CARGAR      */
+/* 5. CONTROL DE VISTAS (SPA)                 */
 /* ========================================== */
-document.addEventListener("DOMContentLoaded", async () => {
-  checkRegionalConfig();
-  initEventListeners();
-  await loadStandardCatalogFromFirestore();
-});
+function switchView(viewId, { push = true } = {}) {
+  if (!VALID_VIEWS.includes(viewId)) viewId = "home";
+  if (viewId === "compare" && !AppState.currentReceiptData) viewId = "home";
+
+  document
+    .querySelectorAll(".app-view")
+    .forEach((view) => view.classList.remove("active-view"));
+  const target = $(`view-${viewId}`);
+  if (target) target.classList.add("active-view");
+
+  // La vista "compare" se considera parte de "scan" en el menú inferior
+  const navId = viewId === "compare" ? "scan" : viewId;
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    const active = item.dataset.view === navId;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
+
+  if (push && location.hash !== `#${viewId}`) {
+    try {
+      history.pushState({ view: viewId }, "", `#${viewId}`);
+    } catch {
+      /* algunos entornos no permiten pushState */
+    }
+  }
+  window.scrollTo({ top: 0 });
+}
+
+function showInitialView() {
+  const hash = location.hash.replace("#", "");
+  switchView(["scan", "list", "search"].includes(hash) ? hash : "home", {
+    push: false,
+  });
+}
+
+/* ========================================== */
+/* 6. REGIÓN, PAÍS Y MONEDA                   */
+/* ========================================== */
+function hasRegionConfig() {
+  return Boolean(
+    AppState.country && AppState.state && AppState.city && AppState.currency,
+  );
+}
+
+function updateLocationBadge() {
+  const label = $("display-location");
+  if (!label) return;
+  label.textContent = hasRegionConfig()
+    ? AppState.locationName || `${AppState.city}, ${AppState.country}`
+    : "Selecciona tu región";
+}
+
+function openRegionalModal() {
+  $("select-country").value = AppState.country || "";
+  $("input-state").value = AppState.state || "";
+  $("input-city").value = AppState.city || "";
+  $("select-currency").value = AppState.currency || "";
+  $("btn-cancel-region").classList.toggle("hidden", !hasRegionConfig());
+  $("regional-modal").classList.remove("hidden");
+  $("select-country").focus();
+}
+
+function closeRegionalModal() {
+  $("regional-modal").classList.add("hidden");
+}
 
 function checkRegionalConfig() {
-  const modal = document.getElementById("regional-modal");
-  if (!AppState.country || !AppState.currency) {
-    modal.classList.remove("hidden");
-  } else {
-    modal.classList.add("hidden");
-    document.getElementById("display-location").textContent =
-      AppState.locationName;
+  if (hasRegionConfig() && !AppState.locationName) {
+    AppState.locationName = `${AppState.city}, ${AppState.country}`;
   }
+  updateLocationBadge();
+  if (!hasRegionConfig()) openRegionalModal();
 }
 
-function initEventListeners() {
-  const regionalForm = document.getElementById("regional-form");
-  if (regionalForm) {
-    regionalForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const countrySelect = document.getElementById("select-country");
-      const currencySelect = document.getElementById("select-currency");
+function handleRegionalSubmit(event) {
+  event.preventDefault();
+  const country = $("select-country").value;
+  const state = $("input-state").value.trim().slice(0, 60);
+  const city = $("input-city").value.trim().slice(0, 60);
+  const currency = $("select-currency").value;
+  if (!country || !state || !city || !currency) return;
 
-      AppState.country = countrySelect.value;
-      AppState.currency = currencySelect.value;
-      AppState.locationName = `${countrySelect.options[countrySelect.selectedIndex].text.split(" ")[0]}, ${AppState.country}`;
+  AppState.country = country;
+  AppState.state = state;
+  AppState.city = city;
+  AppState.currency = currency;
+  AppState.locationName = `${city}, ${country}`;
 
-      localStorage.setItem("cp_country", AppState.country);
-      localStorage.setItem("cp_currency", AppState.currency);
-      localStorage.setItem("cp_location_name", AppState.locationName);
+  storageSet(STORAGE.country, country);
+  storageSet(STORAGE.state, state);
+  storageSet(STORAGE.city, city);
+  storageSet(STORAGE.currency, currency);
+  storageSet(STORAGE.locationName, AppState.locationName);
 
-      document.getElementById("display-location").textContent =
-        AppState.locationName;
-      document.getElementById("regional-modal").classList.add("hidden");
-    });
-  }
+  clearOffersCache();
+  updateLocationBadge();
+  closeRegionalModal();
+  showToast("Región guardada");
+}
 
-  const btnChangeRegion = document.getElementById("btn-change-region");
-  if (btnChangeRegion) {
-    btnChangeRegion.addEventListener("click", () => {
-      document.getElementById("regional-modal").classList.remove("hidden");
-    });
-  }
-
-  const receiptFileInput = document.getElementById("receipt-file-input");
-  if (receiptFileInput) {
-    receiptFileInput.addEventListener("change", handleImageUpload);
-  }
-
-  const btnProcessReceipt = document.getElementById("btn-process-receipt");
-  if (btnProcessReceipt) {
-    btnProcessReceipt.addEventListener("click", processReceiptWithGemini);
-  }
-
-  const btnAddShoppingItem = document.getElementById("btn-add-shopping-item");
-  if (btnAddShoppingItem) {
-    btnAddShoppingItem.addEventListener("click", addShoppingItem);
-  }
-
-  const shoppingItemInput = document.getElementById("shopping-item-input");
-  if (shoppingItemInput) {
-    shoppingItemInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") addShoppingItem();
-    });
-  }
-
-  const btnOptimizeList = document.getElementById("btn-optimize-list");
-  if (btnOptimizeList) {
-    btnOptimizeList.addEventListener("click", optimizeShoppingList);
+function handleCountryChange() {
+  const option = $("select-country").selectedOptions[0];
+  if (option && option.dataset.currency) {
+    $("select-currency").value = option.dataset.currency;
   }
 }
 
 /* ========================================== */
-/* 3. CONTROL DE VISTAS (SPA)                 */
+/* 7. IMAGEN DEL RECIBO                       */
 /* ========================================== */
-function switchView(viewId) {
-  const views = document.querySelectorAll(".app-view");
-  views.forEach((view) => view.classList.remove("active-view"));
+let selectedImageDataUrl = null;
 
-  const targetView = document.getElementById(`view-${viewId}`);
-  if (targetView) {
-    targetView.classList.add("active-view");
-  }
-
-  const navItems = document.querySelectorAll(".nav-item");
-  navItems.forEach((item) => item.classList.remove("active"));
-
-  const navMapping = { home: 0, scan: 1, list: 2, search: 3 };
-  if (navMapping[viewId] !== undefined && navItems[navMapping[viewId]]) {
-    navItems[navMapping[viewId]].classList.add("active");
-  }
-
-  window.scrollTo({ top: 0, behavior: "smooth" });
+// Reduce la foto y la convierte a JPEG: menos peso, análisis más rápido y
+// dentro del límite de tamaño de las funciones de Netlify.
+function resizeImageToJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const longest = Math.max(img.naturalWidth, img.naturalHeight);
+      const scale = Math.min(1, SETTINGS.maxImageSide / longest);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", SETTINGS.jpegQuality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Imagen no válida"));
+    };
+    img.src = url;
+  });
 }
 
-/* ========================================== */
-/* 4. GESTIÓN DE IMAGEN Y API DE GEMINI       */
-/* ========================================== */
-let selectedImageBase64 = null;
+function showImagePreview(dataUrl) {
+  $("receipt-preview").src = dataUrl;
+  document.querySelector(".upload-trigger").classList.add("hidden");
+  $("image-preview-container").classList.remove("hidden");
+  $("btn-process-receipt").disabled = false;
+}
 
-function handleImageUpload(e) {
-  const file = e.target.files[0];
+function clearImagePreview() {
+  selectedImageDataUrl = null;
+  $("receipt-file-input").value = "";
+  $("receipt-preview").removeAttribute("src");
+  $("image-preview-container").classList.add("hidden");
+  document.querySelector(".upload-trigger").classList.remove("hidden");
+  $("btn-process-receipt").disabled = true;
+}
+
+async function handleImageUpload(event) {
+  const file = event.target.files && event.target.files[0];
   if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function (uploadEvent) {
-    selectedImageBase64 = uploadEvent.target.result;
-
-    const previewContainer = document.getElementById("image-preview-container");
-    const previewImg = document.getElementById("receipt-preview");
-    const triggerDiv = document.querySelector(".upload-trigger");
-
-    if (previewImg) previewImg.src = selectedImageBase64;
-    if (triggerDiv) triggerDiv.classList.add("hidden");
-    if (previewContainer) previewContainer.classList.remove("hidden");
-
-    const btnProcess = document.getElementById("btn-process-receipt");
-    if (btnProcess) btnProcess.removeAttribute("disabled");
-  };
-  reader.readAsDataURL(file);
+  if (!file.type.startsWith("image/")) {
+    setScanStatus("El archivo seleccionado no es una imagen.", true);
+    return;
+  }
+  setScanStatus("Preparando la imagen...");
+  try {
+    selectedImageDataUrl = await resizeImageToJpeg(file);
+    showImagePreview(selectedImageDataUrl);
+    setScanStatus("");
+  } catch {
+    clearImagePreview();
+    setScanStatus(
+      "No se pudo leer la imagen. Prueba con otra foto en formato JPG o PNG.",
+      true,
+    );
+  }
 }
 
-const btnRemoveImage = document.getElementById("btn-remove-image");
-if (btnRemoveImage) {
-  btnRemoveImage.addEventListener("click", () => {
-    selectedImageBase64 = null;
-    document.getElementById("receipt-file-input").value = "";
-    document.getElementById("image-preview-container").classList.add("hidden");
-    document.querySelector(".upload-trigger").classList.remove("hidden");
-    document
-      .getElementById("btn-process-receipt")
-      .setAttribute("disabled", "true");
+/* ========================================== */
+/* 8. ANÁLISIS DEL RECIBO CON IA (VÍA NETLIFY) */
+/* ========================================== */
+// El navegador NO llama a Gemini: llama a tu función de Netlify, que guarda la
+// clave en una variable de entorno (GEMINI_API_KEY).
+function extractJsonObject(text) {
+  const clean = String(text || "")
+    .replace(/```json|```/gi, "")
+    .trim();
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    throw new Error(
+      "La IA no devolvió un recibo legible. Prueba con una foto más nítida.",
+    );
+  }
+  try {
+    return JSON.parse(clean.slice(start, end + 1));
+  } catch {
+    throw new Error(
+      "La respuesta de la IA no tenía el formato esperado. Inténtalo de nuevo.",
+    );
+  }
+}
+
+async function requestReceiptAnalysis(dataUrl) {
+  const [header, base64Data] = dataUrl.split(",");
+  const mimeType = (
+    header.split(";")[0].split(":")[1] || "image/jpeg"
+  ).toLowerCase();
+
+  let response;
+  try {
+    response = await fetch(SETTINGS.analyzeEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: base64Data,
+        mimeType,
+        currency: AppState.currency,
+        country: AppState.country,
+      }),
+    });
+  } catch {
+    throw new Error(
+      "No se pudo conectar con el servicio de análisis. Revisa tu conexión.",
+    );
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    /* respuesta sin JSON */
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 && !payload) {
+      throw new Error(
+        "El servicio de análisis no está disponible. Si pruebas en local, ejecuta «netlify dev».",
+      );
+    }
+    throw new Error(
+      payload?.error || `El análisis falló (código ${response.status}).`,
+    );
+  }
+  return extractJsonObject(payload?.text);
+}
+
+// Valida y normaliza lo que devuelve la IA antes de usarlo o guardarlo
+function normalizeReceiptData(raw) {
+  const list = Array.isArray(raw?.items) ? raw.items : [];
+  const items = list
+    .map((item) => {
+      const name = String(item?.name ?? "")
+        .trim()
+        .slice(0, 120);
+      const rawQty = toNumber(item?.quantity);
+      const quantity = rawQty && rawQty > 0 ? rawQty : 1;
+      const lineTotal = toNumber(item?.line_total ?? item?.lineTotal);
+      let unitPrice = toNumber(
+        item?.unit_price ?? item?.unitPrice ?? item?.price,
+      );
+      if (unitPrice === null && lineTotal !== null)
+        unitPrice = lineTotal / quantity;
+      return { name, quantity, unitPrice };
+    })
+    .filter(
+      (item) => item.name && item.unitPrice !== null && item.unitPrice > 0,
+    )
+    .slice(0, SETTINGS.maxItemsPerReceipt);
+
+  if (items.length === 0) {
+    throw new Error(
+      "No encontramos productos en el recibo. Prueba con una foto más nítida y completa.",
+    );
+  }
+
+  const itemsSum = round2(
+    items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
+  );
+  const rawDate = String(raw?.date ?? "");
+  const validDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) &&
+    !Number.isNaN(Date.parse(rawDate)) &&
+    rawDate <= todayIso();
+
+  return {
+    establishment:
+      String(raw?.establishment ?? "")
+        .trim()
+        .slice(0, 80) || "Establecimiento general",
+    date: validDate ? rawDate : todayIso(),
+    items,
+    itemsSum,
+    total: toNumber(raw?.total) ?? itemsSum,
+  };
+}
+
+// Empareja cada línea con el catálogo. El precio se agrupa por "standardName".
+function processReceiptItems(items) {
+  return items.map((item) => {
+    const match = matchProductWithCatalog(item.name);
+    const standardName = match.matched
+      ? match.product.name
+      : match.cleanedName || normalizePlace(item.name) || "producto";
+    return {
+      originalName: item.name,
+      standardName,
+      productId: match.matched ? match.product.id : null,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    };
   });
 }
 
 async function processReceiptWithGemini() {
-  if (!selectedImageBase64) return;
+  if (!selectedImageDataUrl) return;
+  if (!hasRegionConfig()) {
+    openRegionalModal();
+    return;
+  }
+  if (!navigator.onLine) {
+    setScanStatus(
+      "No tienes conexión a internet. Inténtalo cuando vuelvas a tener red.",
+      true,
+    );
+    return;
+  }
 
-  const btn = document.getElementById("btn-process-receipt");
-  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analizando ticket con IA...`;
-  btn.setAttribute("disabled", "true");
+  const btn = $("btn-process-receipt");
+  const originalLabel = btn.innerHTML;
+  btn.innerHTML =
+    '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Analizando ticket con IA...';
+  btn.disabled = true;
+  setScanStatus("Analizando el ticket, esto puede tardar unos segundos...");
 
   try {
-    const base64Data = selectedImageBase64.split(",")[1];
-    const mimeType = selectedImageBase64.split(";")[0].split(":")[1];
+    const raw = await requestReceiptAnalysis(selectedImageDataUrl);
+    const receipt = normalizeReceiptData(raw);
+    receipt.processedItems = processReceiptItems(receipt.items);
+    AppState.currentReceiptData = receipt;
 
-    const apiKey = typeof CONFIG !== "undefined" ? CONFIG.GEMINI_API_KEY : "";
-
-    if (!apiKey || apiKey === "TU_GEMINI_API_KEY") {
-      throw new Error(
-        "No se encontró una API Key válida configurada en config.js",
-      );
-    }
-
-    // Endpoint oficial de la Interactions API
-    const url = `https://generativelanguage.googleapis.com/v1beta/interactions`;
-
-    const promptPayload = {
-      model: "gemini-3.8-flash",
-      input: [
-        {
-          type: "text",
-          text: "Analiza esta imagen de un recibo de supermercado. Extrae la información en un formato JSON estricto sin formato Markdown, ni bloques ```json. Usa exactamente las siguientes claves: 'establishment' (string con el nombre del comercio), 'date' (string en formato YYYY-MM-DD), 'items' (array de objetos, donde cada objeto contiene 'name' como string y 'price' como número), y 'total' (número total). No incluyas explicaciones adicionales.",
-        },
-        {
-          type: "image",
-          data: base64Data,
-          mime_type: mimeType,
-        },
-      ],
-    };
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-        "Api-Revision": "2026-05-20",
-      },
-      body: JSON.stringify(promptPayload),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `Error en la API de Gemini (${response.status}): ${errorData.error?.message || "Petición fallida"}`,
-      );
-    }
-
-    const result = await response.json();
-
-    let textResponse = "";
-    if (result.steps && Array.isArray(result.steps)) {
-      const outputStep = result.steps.find(
-        (step) => step.type === "model_output",
-      );
-      if (outputStep && outputStep.content && outputStep.content[0]) {
-        textResponse = outputStep.content[0].text;
-      }
-    }
-
-    if (!textResponse) {
-      throw new Error(
-        "La API no devolvió una respuesta de texto válida para la imagen cargada.",
-      );
-    }
-
-    const cleanJsonString = textResponse
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    AppState.currentReceiptData = JSON.parse(cleanJsonString);
-
-    await processAndSaveScannedReceipt(AppState.currentReceiptData);
-    await generateParallelTickets(AppState.currentReceiptData);
+    // 1) Comparar con la comunidad ANTES de guardar, para no compararte contigo mismo
+    await renderParallelTickets(receipt);
     switchView("compare");
+    setScanStatus("");
+
+    // 2) Compartir tu recibo con la comunidad
+    const saved = await saveReceiptToCommunity(receipt);
+    if (!saved) showToast("No se pudo compartir tu recibo con la comunidad.");
   } catch (error) {
     console.error("Error al procesar el recibo:", error);
-    alert(`No se pudo procesar el recibo con la IA: ${error.message}`);
+    setScanStatus(error.message || "No se pudo procesar el recibo.", true);
   } finally {
-    btn.innerHTML = `<i class="fa-solid fa-brain"></i> Analizar Recibo con IA`;
-    btn.removeAttribute("disabled");
+    btn.innerHTML = originalLabel;
+    btn.disabled = !selectedImageDataUrl;
   }
 }
 
 /* ========================================== */
-/* 5. PIPELINE DE REGISTRO Y GUARDADO         */
+/* 9. FIRESTORE: GUARDAR Y CONSULTAR PRECIOS  */
 /* ========================================== */
-async function processReceiptItemsPipeline(receiptItems) {
-  const processedItems = [];
-
-  for (const rawItem of receiptItems) {
-    const matchResult = matchProductWithCatalog(rawItem.name);
-
-    if (matchResult.matched) {
-      processedItems.push({
-        standardName: matchResult.product.name,
-        originalName: rawItem.name,
-        price: rawItem.price,
-        productId: matchResult.product.id,
-        isNew: false,
-      });
-    } else {
-      const newCleanName = matchResult.cleanedName;
-      const newProductId = await registerNewProductToCatalog(
-        newCleanName,
-        rawItem.name,
-      );
-
-      processedItems.push({
-        standardName: newCleanName,
-        originalName: rawItem.name,
-        price: rawItem.price,
-        productId: newProductId,
-        isNew: true,
-      });
-    }
-  }
-
-  return processedItems;
-}
-
-async function processAndSaveScannedReceipt(geminiRawData) {
+async function saveReceiptToCommunity(receipt) {
   try {
-    const processedItems = await processReceiptItemsPipeline(
-      geminiRawData.items,
-    );
+    const user = await ensureAuth();
+    if (!user) return false;
 
-    const receiptDocument = {
+    const items = receipt.processedItems.map((item) => ({
+      standardName: item.standardName,
+      originalName: item.originalName,
+      price: round2(item.unitPrice), // precio por unidad (o por kg)
+      quantity: item.quantity,
+      productId: item.productId,
+    }));
+
+    await db.collection("community_receipts").add({
       country: AppState.country,
+      state: AppState.state,
+      city: AppState.city,
+      stateKey: normalizePlace(AppState.state),
+      cityKey: normalizePlace(AppState.city),
       currency: AppState.currency,
-      establishment:
-        geminiRawData.establishment ||
-        geminiRawData.storeName ||
-        "Establecimiento General",
-      date: geminiRawData.date || new Date().toISOString().split("T")[0],
-      items: processedItems,
-      total: geminiRawData.total || 0,
-      userId: auth.currentUser ? auth.currentUser.uid : "anonymous",
-      userEmail: auth.currentUser ? auth.currentUser.email : "guest",
+      establishment: receipt.establishment,
+      date: receipt.date,
+      items,
+      itemKeys: [...new Set(items.map((i) => i.standardName))],
+      total: round2(receipt.total),
+      userId: user.uid, // identificador anónimo; ya no se guarda el correo
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    };
+    });
 
-    await db.collection("community_receipts").add(receiptDocument);
-    console.log("Recibo guardado exitosamente en Firestore.");
+    clearOffersCache();
+    return true;
   } catch (error) {
     console.error("Error al guardar el recibo comunitario:", error);
+    return false;
   }
 }
 
-async function registerNewProductToCatalog(cleanName, originalName) {
-  try {
-    const newProductData = {
-      name: cleanName,
-      category: "General / Otros",
-      keywords: cleanName.split(" "),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    };
+// Caché en memoria: evita repetir lecturas (y costos) durante la sesión
+const offersCache = new Map();
 
-    const docRef = await db.collection("standard_catalog").add(newProductData);
-
-    standardProductCatalog.push({
-      id: docRef.id,
-      ...newProductData,
-    });
-
-    return docRef.id;
-  } catch (error) {
-    console.error("Error al registrar nuevo producto en Firestore:", error);
-    return null;
-  }
+function clearOffersCache() {
+  offersCache.clear();
 }
 
-/* ========================================== */
-/* 6. TICKETS PARALELOS Y LÓGICA DE AHORRO    */
-/* ========================================== */
-async function generateParallelTickets(receipt) {
-  const leftContainer = document.getElementById("left-ticket-content");
-  const rightContainer = document.getElementById("right-ticket-content");
-  if (!leftContainer || !rightContainer) return;
+async function fetchOffersForProduct(standardName) {
+  const cacheKey = `${AppState.country}|${AppState.currency}|${standardName}`;
+  if (offersCache.has(cacheKey)) return offersCache.get(cacheKey);
 
-  // 1. Renderizar Ticket Original
-  let leftHtml = `<p><strong>Local:</strong> ${receipt.establishment}</p>`;
-  leftHtml += `<p><strong>Fecha:</strong> ${receipt.date}</p><hr style="margin: 0.5rem 0; border: dashed 1px #ccc;">`;
+  const request = (async () => {
+    try {
+      await ensureAuth();
+      const snapshot = await db
+        .collection("community_receipts")
+        .where("itemKeys", "array-contains", standardName)
+        .limit(SETTINGS.maxOffersPerQuery)
+        .get();
 
-  if (Array.isArray(receipt.items)) {
-    receipt.items.forEach((item) => {
-      const itemPrice =
-        typeof item.price === "number"
-          ? item.price
-          : parseFloat(item.price) || 0;
-      leftHtml += `<div style="display: flex; justify-content: space-between;"><span>${item.name}</span><span>${itemPrice.toFixed(2)} ${AppState.currency}</span></div>`;
-    });
-  }
+      const offers = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (
+          data.country !== AppState.country ||
+          data.currency !== AppState.currency
+        )
+          return;
+        if (!Array.isArray(data.items)) return;
+        data.items.forEach((item) => {
+          if (item.standardName !== standardName) return;
+          const price = toNumber(item.price);
+          if (price === null || price <= 0) return;
+          offers.push({
+            price,
+            establishment: data.establishment || "Comercio local",
+            date: data.date || "",
+            cityKey: data.cityKey || "",
+            stateKey: data.stateKey || "",
+          });
+        });
+      });
+      return offers;
+    } catch (error) {
+      console.error("Error al consultar precios en Firestore:", error);
+      offersCache.delete(cacheKey);
+      showToast("No se pudieron consultar los precios de la comunidad.");
+      return [];
+    }
+  })();
 
-  const totalOriginal =
-    typeof receipt.total === "number"
-      ? receipt.total
-      : parseFloat(receipt.total) || 0;
-  leftHtml += `<hr style="margin: 0.5rem 0; border: dashed 1px #ccc;"><p style="text-align: right; font-weight: bold;">TOTAL: ${totalOriginal.toFixed(2)} ${AppState.currency}</p>`;
-  leftContainer.innerHTML = leftHtml;
+  offersCache.set(cacheKey, request);
+  return request;
+}
 
-  // 2. Renderizar Comparación basada estrictamente en Firestore (Comunidad)
-  let rightHtml = `<p><strong>Precios Registrados en la Comunidad</strong></p>`;
-  rightHtml += `<hr style="margin: 0.5rem 0; border: dashed 1px var(--accent-teal);">`;
+function filterOffers(
+  offers,
+  { scope = "city", days = SETTINGS.compareDays } = {},
+) {
+  const cutoff = daysAgoIso(days);
+  const city = normalizePlace(AppState.city);
+  const state = normalizePlace(AppState.state);
+  return offers.filter((offer) => {
+    if (offer.date && offer.date < cutoff) return false;
+    if (scope === "city") return offer.cityKey === city;
+    if (scope === "state") return offer.stateKey === state;
+    return true;
+  });
+}
 
-  let communityOptimizedTotal = 0;
+function pickBestOffer(offers) {
+  return [...offers].sort(
+    (a, b) => a.price - b.price || String(b.date).localeCompare(String(a.date)),
+  )[0];
+}
 
-  if (Array.isArray(receipt.items)) {
-    for (const item of receipt.items) {
-      const matchResult = matchProductWithCatalog(item.name);
-      let priceInfo = "📍 Aún no hay sugerencias para este producto";
-      let itemBestPrice =
-        typeof item.price === "number"
-          ? item.price
-          : parseFloat(item.price) || 0;
-
-      if (
-        matchResult.matched &&
-        matchResult.product &&
-        matchResult.product.id
-      ) {
-        // Obtenemos el precio real optimizado de Firestore
-        const bestResult = await getBestPriceDataObjectForProduct(
-          matchResult.product.id,
-        );
-        if (bestResult.lowestPrice !== null) {
-          itemBestPrice = bestResult.lowestPrice;
-          priceInfo = `📍 Cómpralo más barato en: <strong>${bestResult.bestStore}</strong> (~${bestResult.lowestPrice.toFixed(2)} ${AppState.currency})`;
-        }
-      }
-
-      communityOptimizedTotal += itemBestPrice;
-
-      rightHtml += `<div style="margin-bottom: 0.6rem;">`;
-      rightHtml += `<strong>${item.name}</strong><br>`;
-      rightHtml += `<small style="color: var(--accent-teal); font-weight: bold;">${priceInfo}</small>`;
-      rightHtml += `</div>`;
+// Busca primero en tu ciudad; si no hay datos, amplía a tu estado y a tu país
+async function getBestOfferWithFallback(
+  standardName,
+  days = SETTINGS.compareDays,
+) {
+  const offers = await fetchOffersForProduct(standardName);
+  for (const scope of ["city", "state", "country"]) {
+    const filtered = filterOffers(offers, { scope, days });
+    if (filtered.length > 0) {
+      return { offer: pickBestOffer(filtered), scope, count: filtered.length };
     }
   }
+  return null;
+}
 
-  rightHtml += `<hr style="margin: 0.5rem 0; border: dashed 1px var(--accent-teal);">`;
-  rightHtml += `<p style="text-align: right; font-weight: bold; color: var(--success-color);">TOTAL OPTIMIZADO: ${communityOptimizedTotal.toFixed(2)} ${AppState.currency}</p>`;
+/* ========================================== */
+/* 10. TICKETS PARALELOS Y LÓGICA DE AHORRO   */
+/* ========================================== */
+async function renderParallelTickets(receipt) {
+  const leftContainer = $("left-ticket-content");
+  const rightContainer = $("right-ticket-content");
+  if (!leftContainer || !rightContainer) return;
+
+  // Ticket original
+  let leftHtml = `<p><strong>Local:</strong> ${escapeHtml(receipt.establishment)}</p>`;
+  leftHtml += `<p><strong>Fecha:</strong> ${escapeHtml(receipt.date)}</p><hr class="ticket-divider">`;
+  receipt.processedItems.forEach((item) => {
+    const label =
+      item.quantity !== 1
+        ? `${formatQuantity(item.quantity)} x ${item.originalName}`
+        : item.originalName;
+    leftHtml += `<div class="ticket-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(formatMoney(item.unitPrice * item.quantity))}</span></div>`;
+  });
+  leftHtml += `<hr class="ticket-divider"><p class="ticket-total">TOTAL: ${escapeHtml(formatMoney(receipt.total))}</p>`;
+  leftContainer.innerHTML = leftHtml;
+
+  // Comparación con la comunidad (todas las consultas en paralelo)
+  rightContainer.innerHTML =
+    '<p class="ticket-hint empty">Buscando los mejores precios...</p>';
+  const results = await Promise.all(
+    receipt.processedItems.map((item) =>
+      getBestOfferWithFallback(item.standardName),
+    ),
+  );
+
+  let rightHtml =
+    '<p><strong>Precios registrados por la comunidad</strong></p><hr class="ticket-divider">';
+  let optimizedTotal = 0;
+  let itemsWithData = 0;
+
+  receipt.processedItems.forEach((item, index) => {
+    const result = results[index];
+    let unitFinal = item.unitPrice;
+    let hint =
+      '<span class="ticket-hint empty">📍 Aún no hay datos para este producto</span>';
+
+    if (result) {
+      itemsWithData += 1;
+      if (result.offer.price < item.unitPrice - 0.005) {
+        unitFinal = result.offer.price;
+        hint = `<span class="ticket-hint">📍 Más barato en: <strong>${escapeHtml(result.offer.establishment)}</strong> (~${escapeHtml(formatMoney(result.offer.price))} c/u, ${SCOPE_LABELS[result.scope]})</span>`;
+      } else {
+        hint =
+          '<span class="ticket-hint">✓ Ya pagaste el mejor precio que conocemos</span>';
+      }
+    }
+
+    optimizedTotal += unitFinal * item.quantity;
+    rightHtml += `<div class="ticket-item"><strong>${escapeHtml(item.originalName)}</strong><br>${hint}</div>`;
+  });
+
+  const originalSum = receipt.itemsSum;
+  const savings = Math.max(0, originalSum - optimizedTotal);
+  rightHtml += `<hr class="ticket-divider"><p class="ticket-total optimized">TOTAL OPTIMIZADO: ${escapeHtml(formatMoney(optimizedTotal))}</p>`;
   rightContainer.innerHTML = rightHtml;
 
-  if (totalOriginal <= communityOptimizedTotal * 1.01) {
+  if (itemsWithData === 0) {
+    showAlertModal(
+      "¡Gracias por contribuir!",
+      "Todavía no hay precios de la comunidad para comparar. Tu recibo ayudará a otros a ahorrar.",
+      "info",
+    );
+  } else if (savings <= originalSum * 0.01) {
     showAlertModal(
       "¡Excelente!",
-      "Estás comprando en el lugar con mejores precios de la ciudad.",
+      "Estás comprando con los mejores precios que conocemos.",
       "success",
     );
   } else {
+    const percent = Math.round((savings / originalSum) * 100);
     showAlertModal(
       "¡Encontramos una oportunidad!",
-      "¡Encontramos un lugar con mejores precios para tu próxima compra!",
+      `Con estos precios podrías haber ahorrado ${formatMoney(savings)} (${percent}%) en esta compra.`,
       "info",
     );
   }
 }
 
 function showAlertModal(title, message, type) {
-  const modal = document.getElementById("alert-modal");
+  const modal = $("alert-modal");
   if (!modal) return;
-  document.getElementById("alert-title").textContent = title;
-  document.getElementById("alert-message").textContent = message;
-
-  const iconContainer = document.getElementById("alert-icon-container");
-  if (type === "success") {
-    iconContainer.innerHTML = `<i class="fa-solid fa-circle-check success-icon" style="color: var(--success-color);"></i>`;
-  } else {
-    iconContainer.innerHTML = `<i class="fa-solid fa-triangle-exclamation success-icon" style="color: var(--accent-teal);"></i>`;
-  }
-
+  $("alert-title").textContent = title;
+  $("alert-message").textContent = message;
+  $("alert-icon-container").innerHTML =
+    type === "success"
+      ? '<i class="fa-solid fa-circle-check success-icon" aria-hidden="true"></i>'
+      : '<i class="fa-solid fa-circle-info success-icon" style="color: var(--accent-teal);" aria-hidden="true"></i>';
   modal.classList.remove("hidden");
+  $("btn-close-alert").focus();
 }
 
 function closeAlertModal() {
-  const modal = document.getElementById("alert-modal");
+  const modal = $("alert-modal");
   if (modal) modal.classList.add("hidden");
 }
 
 /* ========================================== */
-/* 7. LISTA DE COMPRAS INTELIGENTE            */
+/* 11. LISTA DE COMPRAS INTELIGENTE           */
 /* ========================================== */
-function addShoppingItem() {
-  const input = document.getElementById("shopping-item-input");
-  if (!input) return;
-  const itemName = input.value.trim();
-  if (!itemName) return;
-
-  AppState.shoppingList.push(itemName);
-  input.value = "";
-  renderShoppingList();
+function saveShoppingList() {
+  storageSet(STORAGE.shoppingList, JSON.stringify(AppState.shoppingList));
 }
 
-function renderShoppingList() {
-  const ul = document.getElementById("shopping-list-items");
-  if (!ul) return;
-  ul.innerHTML = "";
-
-  AppState.shoppingList.forEach((item, index) => {
-    const li = document.createElement("li");
-    li.style.cssText =
-      "display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid #eee;";
-    li.innerHTML = `<span><i class="fa-solid fa-basket-shopping" style="color: var(--accent-teal); margin-right: 0.5rem;"></i> ${item}</span> <button onclick="removeShoppingItem(${index})" style="background: none; border: none; color: #e63946; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>`;
-    ul.appendChild(li);
-  });
-
-  const optimizeBtn = document.getElementById("btn-optimize-list");
-  if (optimizeBtn) {
-    if (AppState.shoppingList.length > 0) {
-      optimizeBtn.classList.remove("hidden");
-    } else {
-      optimizeBtn.classList.add("hidden");
-    }
-  }
+function addShoppingItem() {
+  const input = $("shopping-item-input");
+  if (!input) return;
+  const itemName = input.value.trim().slice(0, 80);
+  if (!itemName) return;
+  AppState.shoppingList.push(itemName);
+  input.value = "";
+  saveShoppingList();
+  renderShoppingList();
+  input.focus();
 }
 
 function removeShoppingItem(index) {
   AppState.shoppingList.splice(index, 1);
+  saveShoppingList();
   renderShoppingList();
 }
 
-/**
- * Retorna un objeto con el precio más bajo y el establecimiento real desde Firestore.
- */
-async function getBestPriceDataObjectForProduct(productId) {
-  try {
-    const snapshot = await db.collection("community_receipts").get();
+function renderShoppingList() {
+  const ul = $("shopping-list-items");
+  if (!ul) return;
+  ul.replaceChildren();
 
-    let lowestPrice = null;
-    let bestStore = "";
+  AppState.shoppingList.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = "shopping-item";
 
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.items && Array.isArray(data.items)) {
-        data.items.forEach((item) => {
-          if (item.productId === productId && item.price !== undefined) {
-            const priceNum = parseFloat(item.price);
-            if (!isNaN(priceNum)) {
-              if (lowestPrice === null || priceNum < lowestPrice) {
-                lowestPrice = priceNum;
-                bestStore =
-                  data.establishment || data.storeName || "Comercio Local";
-              }
-            }
-          }
-        });
-      }
-    });
+    const name = document.createElement("span");
+    name.className = "shopping-item-name";
+    const icon = document.createElement("i");
+    icon.className = "fa-solid fa-basket-shopping";
+    icon.setAttribute("aria-hidden", "true");
+    name.append(icon, document.createTextNode(item)); // texto plano: sin riesgo de HTML
 
-    return { lowestPrice, bestStore };
-  } catch (error) {
-    console.error("Error al buscar el mejor precio en Firestore:", error);
-    return { lowestPrice: null, bestStore: "" };
-  }
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-icon-danger";
+    removeBtn.dataset.removeIndex = String(index);
+    removeBtn.setAttribute("aria-label", `Quitar ${item}`);
+    removeBtn.innerHTML =
+      '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+
+    li.append(name, removeBtn);
+    ul.appendChild(li);
+  });
+
+  $("btn-optimize-list").classList.toggle(
+    "hidden",
+    AppState.shoppingList.length === 0,
+  );
 }
 
-async function getBestPriceForProduct(productId) {
-  const result = await getBestPriceDataObjectForProduct(productId);
-  if (result.lowestPrice !== null) {
-    return `📍 Cómpralo más barato en: <strong>${result.bestStore}</strong> (~${result.lowestPrice.toFixed(2)} ${AppState.currency})`;
-  } else {
-    return "📍 Aún no hay sugerencias para este producto";
-  }
+function cleanShoppingQuery(query) {
+  return query
+    .replace(/\b(de|del|la|el|los|las|un|una|unos|unas)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resultCardHtml(title, subtitle, statusHtml) {
+  return `
+    <div class="product-result-card">
+      <div class="result-head">
+        <h4 class="result-title">${escapeHtml(title)}</h4>
+        ${subtitle ? `<small class="result-query">${escapeHtml(subtitle)}</small>` : ""}
+      </div>
+      <div class="price-status">${statusHtml}</div>
+    </div>`;
+}
+
+function bestOfferStatusHtml(best) {
+  if (!best)
+    return '<span class="price-empty">📍 Aún no hay sugerencias para este producto</span>';
+  return `📍 Cómpralo más barato en: <strong>${escapeHtml(best.offer.establishment)}</strong> (~${escapeHtml(formatMoney(best.offer.price))}) <small class="result-query">${SCOPE_LABELS[best.scope]} · ${best.count} registro(s)</small>`;
 }
 
 async function optimizeShoppingList() {
   if (AppState.shoppingList.length === 0) return;
+  if (!hasRegionConfig()) {
+    openRegionalModal();
+    return;
+  }
 
-  const fuse = new Fuse(standardProductCatalog, fuseOptions);
+  const btn = $("btn-optimize-list");
+  const container = $("optimization-result-container");
+  btn.disabled = true;
+  container.innerHTML =
+    '<p class="section-subtitle">Buscando los mejores precios...</p>';
 
-  let reportHtml = `
-    <div class="optimization-header" style="margin-top: 1.5rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary-blue);">Resultado de Optimización de Lista</h3>
-      <button onclick="switchView('home')" class="btn-back-sm" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; font-weight: bold;">
-        <i class="fa-solid fa-house"></i> Inicio
-      </button>
-    </div>
-  `;
+  try {
+    const rows = await Promise.all(
+      AppState.shoppingList.map(async (query) => {
+        const match = matchProductWithCatalog(
+          cleanShoppingQuery(query),
+          SETTINGS.listFuseThreshold,
+        );
+        const key = match.matched
+          ? match.product.name
+          : match.cleanedName || normalizePlace(query);
+        const best = await getBestOfferWithFallback(key);
+        return {
+          query,
+          title: match.matched ? match.product.name : query,
+          best,
+        };
+      }),
+    );
 
-  for (const query of AppState.shoppingList) {
-    const results = fuse.search(query);
-    const bestMatch = results.length > 0 ? results[0].item : null;
-    const matchName = bestMatch ? bestMatch.name : query;
+    const estimatedTotal = rows.reduce(
+      (sum, row) => sum + (row.best ? row.best.offer.price : 0),
+      0,
+    );
+    const withPrice = rows.filter((row) => row.best).length;
 
-    let priceInfoHtml = "📍 Aún no hay sugerencias para este producto";
-    if (bestMatch && bestMatch.id) {
-      priceInfoHtml = await getBestPriceForProduct(bestMatch.id);
+    let html = `
+      <div class="optimization-header">
+        <h3>Resultado de optimización</h3>
+        <button type="button" class="btn-link" data-view="home">
+          <i class="fa-solid fa-house" aria-hidden="true"></i> Inicio
+        </button>
+      </div>`;
+    rows.forEach((row) => {
+      html += resultCardHtml(
+        row.title,
+        `Buscado: "${row.query}"`,
+        bestOfferStatusHtml(row.best),
+      );
+    });
+    if (withPrice > 0) {
+      html += `<p class="ticket-total optimized">Total estimado (${withPrice} de ${rows.length} productos): ${escapeHtml(formatMoney(estimatedTotal))}</p>`;
     }
-
-    reportHtml += `
-      <div class="product-result-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-          <h4 style="margin: 0; text-transform: capitalize; color: #2b2d42; font-size: 1rem;">${matchName}</h4>
-          <small style="color: #8d99ae; font-size: 0.75rem;">Buscado: "${query}"</small>
-        </div>
-        <div class="price-status-container">
-          <small style="color: var(--success-color); font-weight: bold; font-size: 0.95rem;">${priceInfoHtml}</small>
-        </div>
-      </div>
-    `;
+    container.innerHTML = html;
+    container.scrollIntoView({ behavior: "smooth" });
+  } finally {
+    btn.disabled = false;
   }
-
-  let resultContainer = document.getElementById(
-    "optimization-result-container",
-  );
-  if (!resultContainer) {
-    resultContainer = document.createElement("div");
-    resultContainer.id = "optimization-result-container";
-    const viewList = document.getElementById("view-list");
-    if (viewList) viewList.appendChild(resultContainer);
-  }
-
-  resultContainer.innerHTML = reportHtml;
-  resultContainer.scrollIntoView({ behavior: "smooth" });
 }
 
+/* ========================================== */
+/* 12. CONSULTAR PRECIOS                      */
+/* ========================================== */
+let searchToken = 0;
+let searchTimer = null;
+
+async function runProductSearch() {
+  const container = $("search-results-container");
+  const query = $("product-search-input").value.trim();
+  const token = ++searchToken;
+
+  if (query.length < 2) {
+    container.innerHTML =
+      '<p class="section-subtitle">Escribe el nombre de un producto para ver sus precios.</p>';
+    return;
+  }
+  if (!hasRegionConfig()) {
+    openRegionalModal();
+    return;
+  }
+
+  container.innerHTML = '<p class="section-subtitle">Buscando...</p>';
+  const scope = $("filter-area").value;
+  const days = Number($("filter-time").value) || SETTINGS.compareDays;
+  const cleaned = normalizeName(query);
+
+  let names = catalogFuse
+    ? catalogFuse
+        .search(cleaned, { limit: 5 })
+        .filter((r) => r.score <= SETTINGS.listFuseThreshold)
+        .map((r) => r.item.name)
+    : [];
+  if (names.length === 0 && cleaned) names = [cleaned];
+
+  const rows = await Promise.all(
+    names.map(async (name) => {
+      const offers = filterOffers(await fetchOffersForProduct(name), {
+        scope,
+        days,
+      });
+      return { name, offers };
+    }),
+  );
+  if (token !== searchToken) return; // llegó una búsqueda más reciente
+
+  let html = "";
+  rows.forEach(({ name, offers }) => {
+    if (offers.length === 0) {
+      html += resultCardHtml(
+        name,
+        "",
+        '<span class="price-empty">📍 Sin registros con estos filtros</span>',
+      );
+      return;
+    }
+    const best = pickBestOffer(offers);
+    html += resultCardHtml(
+      name,
+      `${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
+      `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> en ${escapeHtml(best.establishment)}`,
+    );
+  });
+  container.innerHTML =
+    html ||
+    '<p class="section-subtitle">No encontramos productos con ese nombre.</p>';
+}
+
+function scheduleSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runProductSearch, SETTINGS.searchDebounceMs);
+}
+
+/* ========================================== */
+/* 13. EVENTOS E INICIALIZACIÓN               */
+/* ========================================== */
+function initEventListeners() {
+  // Navegación: cualquier elemento con data-view
+  document.addEventListener("click", (event) => {
+    const viewTarget = event.target.closest("[data-view]");
+    if (viewTarget) switchView(viewTarget.dataset.view);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAlertModal();
+      if (hasRegionConfig()) closeRegionalModal();
+      return;
+    }
+    // Teclado: Enter o espacio activan los elementos con role="button"
+    if (
+      (event.key === "Enter" || event.key === " ") &&
+      event.target.matches('[role="button"]')
+    ) {
+      event.preventDefault();
+      event.target.click();
+    }
+  });
+
+  window.addEventListener("popstate", () => {
+    const hash = location.hash.replace("#", "") || "home";
+    switchView(hash, { push: false });
+  });
+
+  // Región
+  $("regional-form").addEventListener("submit", handleRegionalSubmit);
+  $("select-country").addEventListener("change", handleCountryChange);
+  $("btn-change-region").addEventListener("click", openRegionalModal);
+  $("btn-cancel-region").addEventListener("click", closeRegionalModal);
+
+  // Recibo
+  $("receipt-file-input").addEventListener("change", handleImageUpload);
+  $("btn-remove-image").addEventListener("click", () => {
+    clearImagePreview();
+    setScanStatus("");
+    $("receipt-file-input").click();
+  });
+  $("btn-process-receipt").addEventListener("click", processReceiptWithGemini);
+  $("btn-close-alert").addEventListener("click", closeAlertModal);
+
+  // Lista de compras
+  $("btn-add-shopping-item").addEventListener("click", addShoppingItem);
+  $("shopping-item-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") addShoppingItem();
+  });
+  $("shopping-list-items").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-remove-index]");
+    if (btn) removeShoppingItem(Number(btn.dataset.removeIndex));
+  });
+  $("btn-optimize-list").addEventListener("click", optimizeShoppingList);
+
+  // Búsqueda
+  $("product-search-input").addEventListener("input", scheduleSearch);
+  $("filter-area").addEventListener("change", runProductSearch);
+  $("filter-time").addEventListener("change", runProductSearch);
+}
+
+function initApp() {
+  loadStandardCatalog();
+  initEventListeners();
+  checkRegionalConfig();
+  renderShoppingList();
+  showInitialView();
+  ensureAuth(); // inicia sesión anónima en segundo plano
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
+
+/* ========================================== */
+/* 14. SERVICE WORKER (PWA)                   */
+/* ========================================== */
 if ("serviceWorker" in navigator) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+
+  // Si se instala una versión nueva, recarga una vez para usar los archivos nuevos
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./sw.js")
-      .then((reg) =>
-        console.log("Service Worker registrado con éxito:", reg.scope),
-      )
+      .then((reg) => console.log("Service Worker registrado:", reg.scope))
       .catch((err) =>
         console.log("Error al registrar el Service Worker:", err),
       );

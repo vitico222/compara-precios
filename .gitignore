@@ -1,1 +1,15 @@
+# Claves y variables de entorno (nunca se suben a GitHub)
+.env
+.env.*
 config.js
+
+# Netlify (carpeta local de "netlify dev" y vínculo del sitio)
+.netlify/
+
+# Dependencias
+node_modules/
+
+# Archivos del sistema y del editor
+.DS_Store
+Thumbs.db
+*.log

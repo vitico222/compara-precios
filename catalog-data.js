@@ -1,14 +1,24 @@
 /* ========================================== */
-/* CATALOG-DATA.JS - BASE DE DATOS DE PRODUCTOS */
+/* CATALOG-DATA.JS - CATÁLOGO ESTÁNDAR DE PRODUCTOS */
 /* ========================================== */
-
-/* ========================================== */
-/* CATALOG-DATA.JS - CATÁLOGO MASIVO (200+ PRODUCTOS) */
-/* ========================================== */
+/*
+  REGLAS PARA EDITAR ESTE ARCHIVO
+  1. "name" debe estar ya normalizado: minúsculas, sin acentos ni ñ, sin símbolos
+     y con las medidas en formato estándar (1kg, 500g, 1l, 1.5l, 500ml, x6).
+     Es exactamente lo que produce normalizeProductName() en utils.js.
+  2. "name" es la CLAVE con la que se agrupan los precios de la comunidad.
+     Si lo cambias, los precios guardados con el nombre anterior dejan de contarse.
+  3. "keywords" también va sin acentos. Agrega sinónimos regionales y marcas
+     (ej. cambur/banano/guineo, caraotas/frijoles/porotos): ayudan a que el
+     emparejamiento aproximado reconozca el producto en distintos países.
+  4. Los productos que se venden por peso (frutas, verduras, carnes) se
+     comparan por precio de 1kg.
+  5. Los "id" no se reutilizan. Para agregar productos, usa el siguiente número libre.
+*/
 
 const initialCatalogData = [
   // ==========================================
-  // 1. VÍVERES Y ABARROTES (Grano, Harinas, Aceites, etc.)
+  // 1. VÍVERES Y ABARROTES
   // ==========================================
   {
     id: "prod_001",
@@ -26,7 +36,15 @@ const initialCatalogData = [
     id: "prod_003",
     name: "harina de maiz precocida 1kg",
     category: "Víveres",
-    keywords: ["harina", "maiz", "pan", "precocida"],
+    keywords: [
+      "harina",
+      "maiz",
+      "precocida",
+      "arepas",
+      "pan",
+      "juana",
+      "mazeca",
+    ],
   },
   {
     id: "prod_004",
@@ -47,16 +65,22 @@ const initialCatalogData = [
     keywords: ["arroz", "blanco", "largo", "fino"],
   },
   {
+    id: "prod_221",
+    name: "arroz integral 1kg",
+    category: "Víveres",
+    keywords: ["arroz", "integral"],
+  },
+  {
     id: "prod_007",
     name: "pasta alimenticia espagueti 1kg",
     category: "Víveres",
-    keywords: ["pasta", "espagueti", "tallarin"],
+    keywords: ["pasta", "espagueti", "spaghetti", "tallarin"],
   },
   {
     id: "prod_008",
     name: "pasta alimenticia corta 1kg",
     category: "Víveres",
-    keywords: ["pasta", "corta", "penne", "macarron"],
+    keywords: ["pasta", "corta", "penne", "macarron", "coditos"],
   },
   {
     id: "prod_009",
@@ -78,27 +102,33 @@ const initialCatalogData = [
   },
   {
     id: "prod_012",
-    name: "granos caraotas negras 1kg",
+    name: "caraotas negras 1kg",
     category: "Víveres",
-    keywords: ["caraotas", "negras", "frijoles", "granos"],
+    keywords: ["caraotas", "frijoles negros", "porotos negros", "granos"],
   },
   {
     id: "prod_013",
-    name: "granos frijoles rojos 1kg",
+    name: "frijoles rojos 1kg",
     category: "Víveres",
-    keywords: ["frijoles", "rojos", "granos"],
+    keywords: ["frijoles", "rojos", "porotos", "habichuelas", "granos"],
+  },
+  {
+    id: "prod_222",
+    name: "garbanzos 1kg",
+    category: "Víveres",
+    keywords: ["garbanzos", "granos"],
   },
   {
     id: "prod_014",
-    name: "granos lentejas 1kg",
+    name: "lentejas 1kg",
     category: "Víveres",
     keywords: ["lentejas", "granos"],
   },
   {
     id: "prod_015",
-    name: "granos arvejas amarillas 1kg",
+    name: "arvejas amarillas 1kg",
     category: "Víveres",
-    keywords: ["arvejas", "amarillas", "granos"],
+    keywords: ["arvejas", "amarillas", "chicharos", "guisantes", "granos"],
   },
   {
     id: "prod_016",
@@ -126,21 +156,21 @@ const initialCatalogData = [
   },
   {
     id: "prod_020",
-    name: "granos maiz dulce enlatado 300g",
+    name: "maiz dulce enlatado 300g",
     category: "Víveres",
-    keywords: ["maiz", "dulce", "choclo", "enlatado"],
+    keywords: ["maiz", "dulce", "choclo", "elote", "enlatado"],
   },
   {
     id: "prod_021",
     name: "pasta de tomate 400g",
     category: "Víveres",
-    keywords: ["pasta", "tomate", "salsa"],
+    keywords: ["pasta", "tomate", "salsa", "concentrado"],
   },
   {
     id: "prod_022",
     name: "salsa de tomate ketchup 400g",
     category: "Víveres",
-    keywords: ["ketchup", "salsa", "tomate"],
+    keywords: ["ketchup", "catsup", "salsa", "tomate"],
   },
   {
     id: "prod_023",
@@ -170,13 +200,13 @@ const initialCatalogData = [
     id: "prod_027",
     name: "salsa de soya 300ml",
     category: "Víveres",
-    keywords: ["salsa", "soya"],
+    keywords: ["salsa", "soya", "soja"],
   },
   {
     id: "prod_028",
     name: "harina de trigo leudante 1kg",
     category: "Víveres",
-    keywords: ["harina", "trigo", "leudante"],
+    keywords: ["harina", "trigo", "leudante", "con polvo"],
   },
   {
     id: "prod_029",
@@ -212,13 +242,13 @@ const initialCatalogData = [
     id: "prod_034",
     name: "te negro en saquitos x20",
     category: "Víveres",
-    keywords: ["te", "negro", "infusion"],
+    keywords: ["te", "negro", "infusion", "saquitos"],
   },
   {
     id: "prod_035",
     name: "manzanilla en saquitos x20",
     category: "Víveres",
-    keywords: ["manzanilla", "infusion", "te"],
+    keywords: ["manzanilla", "infusion", "te", "saquitos"],
   },
   {
     id: "prod_036",
@@ -236,19 +266,37 @@ const initialCatalogData = [
     id: "prod_038",
     name: "galletas soda saladas 300g",
     category: "Víveres",
-    keywords: ["galletas", "soda", "saladas"],
+    keywords: ["galletas", "soda", "saladas", "crackers"],
   },
   {
     id: "prod_039",
     name: "chocolate con leche tableta 100g",
     category: "Víveres",
-    keywords: ["chocolate", "leche", "dulce"],
+    keywords: ["chocolate", "leche", "tableta", "dulce"],
+  },
+  {
+    id: "prod_223",
+    name: "chocolate en polvo 400g",
+    category: "Víveres",
+    keywords: ["chocolate", "polvo", "cacao", "achocolatado"],
+  },
+  {
+    id: "prod_224",
+    name: "mermelada de fresa 500g",
+    category: "Víveres",
+    keywords: ["mermelada", "fresa", "jalea", "dulce"],
+  },
+  {
+    id: "prod_225",
+    name: "leche condensada 395g",
+    category: "Víveres",
+    keywords: ["leche", "condensada", "lechera"],
   },
   {
     id: "prod_040",
     name: "pan de sandwich molde blanco 500g",
     category: "Víveres",
-    keywords: ["pan", "sandwich", "molde", "blanco"],
+    keywords: ["pan", "sandwich", "molde", "blanco", "tostado"],
   },
   {
     id: "prod_041",
@@ -260,7 +308,7 @@ const initialCatalogData = [
     id: "prod_042",
     name: "pan de perro caliente paquete x8",
     category: "Víveres",
-    keywords: ["pan", "perro", "hot dog"],
+    keywords: ["pan", "perro", "hot dog", "salchicha"],
   },
   {
     id: "prod_043",
@@ -278,31 +326,43 @@ const initialCatalogData = [
     id: "prod_045",
     name: "cubitos de caldo de pollo x12",
     category: "Víveres",
-    keywords: ["cubitos", "caldo", "pollo", "maggi"],
+    keywords: ["cubitos", "caldo", "pollo", "maggi", "sazonador"],
   },
   {
     id: "prod_046",
     name: "sopa de sobre de pollo con fideos 60g",
     category: "Víveres",
-    keywords: ["sopa", "sobre", "fideos"],
+    keywords: ["sopa", "sobre", "fideos", "pollo"],
   },
   {
     id: "prod_047",
-    name: "maicena fécula de maíz 400g",
+    name: "maicena fecula de maiz 400g",
     category: "Víveres",
-    keywords: ["maicena", "fecula", "maiz"],
+    keywords: ["maicena", "fecula", "maiz", "almidon"],
   },
   {
     id: "prod_048",
     name: "polvo para hornear 200g",
     category: "Víveres",
-    keywords: ["polvo", "hornear", "leudante"],
+    keywords: ["polvo", "hornear", "royal", "levadura quimica"],
   },
   {
     id: "prod_049",
     name: "esencia de vainilla 30ml",
     category: "Víveres",
-    keywords: ["vainilla", "esencia"],
+    keywords: ["vainilla", "esencia", "saborizante"],
+  },
+  {
+    id: "prod_226",
+    name: "pimienta negra molida 50g",
+    category: "Víveres",
+    keywords: ["pimienta", "negra", "molida", "especias"],
+  },
+  {
+    id: "prod_227",
+    name: "oregano seco 20g",
+    category: "Víveres",
+    keywords: ["oregano", "seco", "especias"],
   },
 
   // ==========================================
@@ -324,61 +384,61 @@ const initialCatalogData = [
     id: "prod_052",
     name: "leche completa pasteurizada 1l",
     category: "Lácteos",
-    keywords: ["leche", "pasteurizada", "liquida"],
+    keywords: ["leche", "completa", "entera", "pasteurizada", "liquida"],
   },
   {
     id: "prod_053",
     name: "leche deslactosada 1l",
     category: "Lácteos",
-    keywords: ["leche", "deslactosada"],
+    keywords: ["leche", "deslactosada", "sin lactosa"],
   },
   {
     id: "prod_054",
     name: "queso blanco duro 1kg",
     category: "Lácteos",
-    keywords: ["queso", "blanco", "duro", "llanero"],
+    keywords: ["queso", "blanco", "duro", "llanero", "rallar"],
   },
   {
     id: "prod_055",
     name: "queso blanco semiduro 1kg",
     category: "Lácteos",
-    keywords: ["queso", "blanco", "semiduro"],
+    keywords: ["queso", "blanco", "semiduro", "telita"],
   },
   {
     id: "prod_056",
     name: "queso amarillo tipo gouda 1kg",
     category: "Lácteos",
-    keywords: ["queso", "amarillo", "goudas", "gouda"],
+    keywords: ["queso", "amarillo", "gouda", "edam"],
   },
   {
     id: "prod_057",
     name: "queso crema 200g",
     category: "Lácteos",
-    keywords: ["queso", "crema", "untable"],
+    keywords: ["queso", "crema", "untable", "philadelphia"],
   },
   {
     id: "prod_058",
     name: "mantequilla con sal 500g",
     category: "Lácteos",
-    keywords: ["mantequilla", "margarina", "sal"],
+    keywords: ["mantequilla", "con sal"],
   },
   {
     id: "prod_059",
     name: "margarina sin sal 500g",
     category: "Lácteos",
-    keywords: ["margarina", "sin sal"],
+    keywords: ["margarina", "sin sal", "mavesa"],
   },
   {
     id: "prod_060",
-    name: "yogurt firme sabor fresa 1l",
+    name: "yogurt bebible sabor fresa 1l",
     category: "Lácteos",
-    keywords: ["yogurt", "fresa", "bebible"],
+    keywords: ["yogurt", "yogur", "fresa", "bebible"],
   },
   {
     id: "prod_061",
     name: "yogurt natural 1l",
     category: "Lácteos",
-    keywords: ["yogurt", "natural"],
+    keywords: ["yogurt", "yogur", "natural"],
   },
   {
     id: "prod_062",
@@ -390,19 +450,19 @@ const initialCatalogData = [
     id: "prod_063",
     name: "carton de huevos grandes x30",
     category: "Lácteos",
-    keywords: ["huevos", "carton", "huevos 30"],
+    keywords: ["huevos", "carton", "30"],
   },
   {
     id: "prod_064",
     name: "media docena de huevos x6",
     category: "Lácteos",
-    keywords: ["huevos", "docena"],
+    keywords: ["huevos", "docena", "6"],
   },
   {
     id: "prod_065",
-    name: "queso mozarella 1kg",
+    name: "queso mozzarella 1kg",
     category: "Lácteos",
-    keywords: ["queso", "mozarella", "pizza"],
+    keywords: ["queso", "mozzarella", "mozarella", "pizza"],
   },
   {
     id: "prod_066",
@@ -410,9 +470,15 @@ const initialCatalogData = [
     category: "Lácteos",
     keywords: ["ricotta", "requeson"],
   },
+  {
+    id: "prod_072",
+    name: "queso de mano 1kg",
+    category: "Lácteos",
+    keywords: ["queso", "mano"],
+  },
 
   // ==========================================
-  // 3. EMBUTIDOS, CARNES Y PROTEÍNAS
+  // 3. EMBUTIDOS, CARNES Y PESCADOS
   // ==========================================
   {
     id: "prod_070",
@@ -422,15 +488,9 @@ const initialCatalogData = [
   },
   {
     id: "prod_071",
-    name: "jamon de turkey / pavo 1kg",
+    name: "jamon de pavo 1kg",
     category: "Embutidos",
     keywords: ["jamon", "pavo", "turkey"],
-  },
-  {
-    id: "prod_072",
-    name: "queso de mano 1kg",
-    category: "Embutidos",
-    keywords: ["queso", "mano"],
   },
   {
     id: "prod_073",
@@ -442,7 +502,7 @@ const initialCatalogData = [
     id: "prod_074",
     name: "tocineta ahumada 250g",
     category: "Embutidos",
-    keywords: ["tocineta", "bacon", "ahumada"],
+    keywords: ["tocineta", "bacon", "panceta", "ahumada"],
   },
   {
     id: "prod_075",
@@ -460,7 +520,7 @@ const initialCatalogData = [
     id: "prod_077",
     name: "carne de res para desmechar 1kg",
     category: "Carnes",
-    keywords: ["carne", "res", "falda", "desmechar"],
+    keywords: ["carne", "res", "falda", "desmechar", "mechada"],
   },
   {
     id: "prod_078",
@@ -472,7 +532,7 @@ const initialCatalogData = [
     id: "prod_079",
     name: "bistec de res 1kg",
     category: "Carnes",
-    keywords: ["bistec", "res", "carne"],
+    keywords: ["bistec", "res", "carne", "bife"],
   },
   {
     id: "prod_080",
@@ -508,7 +568,7 @@ const initialCatalogData = [
     id: "prod_085",
     name: "muslos de pollo 1kg",
     category: "Carnes",
-    keywords: ["muslos", "pollo"],
+    keywords: ["muslos", "pollo", "pernil"],
   },
   {
     id: "prod_086",
@@ -526,7 +586,7 @@ const initialCatalogData = [
     id: "prod_088",
     name: "carne de cerdo para guisar 1kg",
     category: "Carnes",
-    keywords: ["cerdo", "guisar"],
+    keywords: ["cerdo", "guisar", "puerco"],
   },
   {
     id: "prod_089",
@@ -544,11 +604,11 @@ const initialCatalogData = [
     id: "prod_091",
     name: "camarones enteros 500g",
     category: "Pescados",
-    keywords: ["camarones", "mariscos"],
+    keywords: ["camarones", "gambas", "mariscos"],
   },
 
   // ==========================================
-  // 4. FRUTAS Y VERDURAS (FRESCOS)
+  // 4. FRUTAS Y VERDURAS
   // ==========================================
   {
     id: "prod_100",
@@ -558,15 +618,15 @@ const initialCatalogData = [
   },
   {
     id: "prod_101",
-    name: "cebolla blanca / amarilla 1kg",
+    name: "cebolla 1kg",
     category: "Verduras",
-    keywords: ["cebolla"],
+    keywords: ["cebolla", "blanca", "amarilla"],
   },
   {
     id: "prod_102",
     name: "tomate rojo perita 1kg",
     category: "Verduras",
-    keywords: ["tomate", "perita", "rojo"],
+    keywords: ["tomate", "perita", "rojo", "jitomate"],
   },
   {
     id: "prod_103",
@@ -576,9 +636,9 @@ const initialCatalogData = [
   },
   {
     id: "prod_104",
-    name: "pimenton verde / rojo 1kg",
+    name: "pimenton 1kg",
     category: "Verduras",
-    keywords: ["pimenton", "morron", "aji"],
+    keywords: ["pimenton", "morron", "aji", "verde", "rojo"],
   },
   {
     id: "prod_105",
@@ -594,13 +654,13 @@ const initialCatalogData = [
   },
   {
     id: "prod_107",
-    name: "ciboulette cebollín manojo",
+    name: "cebollin manojo",
     category: "Verduras",
-    keywords: ["cebollin", "ciboulette"],
+    keywords: ["cebollin", "ciboulette", "cebolleta"],
   },
   {
     id: "prod_108",
-    name: "apio españa ramita",
+    name: "apio espana ramita",
     category: "Verduras",
     keywords: ["apio", "espana", "celery"],
   },
@@ -614,19 +674,19 @@ const initialCatalogData = [
     id: "prod_110",
     name: "ocumo blanco 1kg",
     category: "Verduras",
-    keywords: ["ocumo", "tubérculo"],
+    keywords: ["ocumo", "tuberculo", "malanga"],
   },
   {
     id: "prod_111",
     name: "name fresco 1kg",
     category: "Verduras",
-    keywords: ["name", "tubérculo"],
+    keywords: ["name", "tuberculo"],
   },
   {
     id: "prod_112",
-    name: "platano verde / maduro 1kg",
+    name: "platano 1kg",
     category: "Verduras",
-    keywords: ["platano", "cambur", "verde"],
+    keywords: ["platano", "plantano", "verde", "maduro", "topocho"],
   },
   {
     id: "prod_113",
@@ -648,15 +708,27 @@ const initialCatalogData = [
   },
   {
     id: "prod_116",
-    name: "pepinillo pepino 1kg",
+    name: "pepino 1kg",
     category: "Verduras",
     keywords: ["pepino", "pepinillo"],
   },
   {
+    id: "prod_228",
+    name: "aguacate 1kg",
+    category: "Verduras",
+    keywords: ["aguacate", "palta"],
+  },
+  {
+    id: "prod_229",
+    name: "calabacin 1kg",
+    category: "Verduras",
+    keywords: ["calabacin", "zucchini", "zapallito"],
+  },
+  {
     id: "prod_117",
-    name: "cambur titi / banano 1kg",
+    name: "cambur 1kg",
     category: "Frutas",
-    keywords: ["cambur", "banana", "platano"],
+    keywords: ["cambur", "banana", "banano", "guineo", "titi"],
   },
   {
     id: "prod_118",
@@ -683,6 +755,12 @@ const initialCatalogData = [
     keywords: ["naranja", "jugo"],
   },
   {
+    id: "prod_230",
+    name: "mandarina 1kg",
+    category: "Frutas",
+    keywords: ["mandarina", "clementina"],
+  },
+  {
     id: "prod_122",
     name: "limon criollo 1kg",
     category: "Frutas",
@@ -690,7 +768,7 @@ const initialCatalogData = [
   },
   {
     id: "prod_123",
-    name: "patilla / sandia entera 1kg",
+    name: "patilla entera 1kg",
     category: "Frutas",
     keywords: ["patilla", "sandia"],
   },
@@ -702,9 +780,9 @@ const initialCatalogData = [
   },
   {
     id: "prod_125",
-    name: "papaya / lechoza entera 1kg",
+    name: "lechoza entera 1kg",
     category: "Frutas",
-    keywords: ["lechoza", "papaya"],
+    keywords: ["lechoza", "papaya", "fruta bomba"],
   },
   {
     id: "prod_126",
@@ -714,9 +792,27 @@ const initialCatalogData = [
   },
   {
     id: "prod_127",
-    name: "piña hawaiiana entera 1kg",
+    name: "pina entera 1kg",
     category: "Frutas",
-    keywords: ["piña", "ananas"],
+    keywords: ["pina", "anana", "ananas"],
+  },
+  {
+    id: "prod_231",
+    name: "mango 1kg",
+    category: "Frutas",
+    keywords: ["mango"],
+  },
+  {
+    id: "prod_232",
+    name: "parchita 1kg",
+    category: "Frutas",
+    keywords: ["parchita", "maracuya", "fruta de la pasion"],
+  },
+  {
+    id: "prod_233",
+    name: "uvas importadas 1kg",
+    category: "Frutas",
+    keywords: ["uvas", "uva"],
   },
 
   // ==========================================
@@ -726,49 +822,49 @@ const initialCatalogData = [
     id: "prod_140",
     name: "agua mineral embotellada 500ml",
     category: "Bebidas",
-    keywords: ["agua", "mineral", "botella"],
+    keywords: ["agua", "mineral", "botella", "botellita"],
   },
   {
     id: "prod_141",
     name: "agua mineral bidon 5l",
     category: "Bebidas",
-    keywords: ["agua", "bidon", "galon"],
+    keywords: ["agua", "bidon", "garrafa", "botellon"],
   },
   {
     id: "prod_142",
     name: "refresco cola 1.5l",
     category: "Bebidas",
-    keywords: ["refresco", "cola", "soda", "pepsi", "coca"],
+    keywords: ["refresco", "cola", "soda", "gaseosa", "pepsi", "coca cola"],
   },
   {
     id: "prod_143",
     name: "refresco cola 2l",
     category: "Bebidas",
-    keywords: ["refresco", "cola", "2l"],
+    keywords: ["refresco", "cola", "soda", "gaseosa", "pepsi", "coca cola"],
   },
   {
     id: "prod_144",
-    name: "refresco saboraranja 2l",
+    name: "refresco sabor naranja 2l",
     category: "Bebidas",
-    keywords: ["refresco", "naranja"],
+    keywords: ["refresco", "naranja", "gaseosa", "fanta"],
   },
   {
     id: "prod_145",
-    name: "refresco saborlimon 2l",
+    name: "refresco sabor limon 2l",
     category: "Bebidas",
-    keywords: ["refresco", "limon"],
+    keywords: ["refresco", "limon", "gaseosa", "sprite"],
   },
   {
     id: "prod_146",
     name: "jugo en polvo sabor durazno sobre",
     category: "Bebidas",
-    keywords: ["jugo", "polvo", "durazno", "tash", "frutisco"],
+    keywords: ["jugo", "polvo", "durazno", "tang", "frutisco"],
   },
   {
     id: "prod_147",
     name: "jugo en polvo sabor naranja sobre",
     category: "Bebidas",
-    keywords: ["jugo", "polvo", "naranja"],
+    keywords: ["jugo", "polvo", "naranja", "tang", "frutisco"],
   },
   {
     id: "prod_148",
@@ -792,13 +888,13 @@ const initialCatalogData = [
     id: "prod_151",
     name: "cerveza en lata 355ml pack x6",
     category: "Licores",
-    keywords: ["cerveza", "lata", "pack"],
+    keywords: ["cerveza", "lata", "pack", "six pack"],
   },
   {
     id: "prod_152",
     name: "cerveza botellita 222ml",
     category: "Licores",
-    keywords: ["cerveza", "botella"],
+    keywords: ["cerveza", "botella", "botellita"],
   },
   {
     id: "prod_153",
@@ -826,7 +922,7 @@ const initialCatalogData = [
     id: "prod_170",
     name: "detergente en polvo 1kg",
     category: "Limpieza",
-    keywords: ["detergente", "polvo", "jabon", "lavar"],
+    keywords: ["detergente", "polvo", "jabon", "lavar", "ropa"],
   },
   {
     id: "prod_171",
@@ -838,31 +934,31 @@ const initialCatalogData = [
     id: "prod_172",
     name: "suavizante para ropa 1l",
     category: "Limpieza",
-    keywords: ["suavizante", "ropa", "flex"],
+    keywords: ["suavizante", "ropa", "enjuague"],
   },
   {
     id: "prod_173",
-    name: "jabon en panela azul lavar ropa x250g",
+    name: "jabon azul en panela para ropa 250g",
     category: "Limpieza",
-    keywords: ["jabon", "azul", "panela", "lasallana"],
+    keywords: ["jabon", "azul", "panela", "barra", "lavar"],
   },
   {
     id: "prod_174",
     name: "lavaplatos en crema 500g",
     category: "Limpieza",
-    keywords: ["lavaplatos", "crema", "bonanza", "limpieza"],
+    keywords: ["lavaplatos", "crema", "bonanza", "platos"],
   },
   {
     id: "prod_175",
     name: "lavaplatos liquido 500ml",
     category: "Limpieza",
-    keywords: ["lavaplatos", "liquido", "fregadero"],
+    keywords: ["lavaplatos", "liquido", "fregadero", "platos"],
   },
   {
     id: "prod_176",
     name: "cloro lejia liquido 1l",
     category: "Limpieza",
-    keywords: ["cloro", "lejia", "desinfectante"],
+    keywords: ["cloro", "lejia", "blanqueador", "desinfectante"],
   },
   {
     id: "prod_177",
@@ -886,13 +982,13 @@ const initialCatalogData = [
     id: "prod_180",
     name: "papel higienico x4 rollos",
     category: "Limpieza",
-    keywords: ["papel", "higienico", "toilette"],
+    keywords: ["papel", "higienico", "toilette", "4"],
   },
   {
     id: "prod_181",
-    name: "papel higienico mega rinde x12 rollos",
+    name: "papel higienico x12 rollos",
     category: "Limpieza",
-    keywords: ["papel", "higienico", "12", "pack"],
+    keywords: ["papel", "higienico", "toilette", "12", "mega", "rinde"],
   },
   {
     id: "prod_182",
@@ -902,9 +998,9 @@ const initialCatalogData = [
   },
   {
     id: "prod_183",
-    name: "toallines de cocina rollo x1",
+    name: "toallin de cocina rollo",
     category: "Limpieza",
-    keywords: ["toallin", "cocina", "papel absorvente"],
+    keywords: ["toallin", "toallines", "cocina", "papel absorbente"],
   },
   {
     id: "prod_184",
@@ -916,13 +1012,13 @@ const initialCatalogData = [
     id: "prod_185",
     name: "bolsas de basura medianas x10",
     category: "Limpieza",
-    keywords: ["bolsas", "basura", "residuos"],
+    keywords: ["bolsas", "basura", "residuos", "medianas"],
   },
   {
     id: "prod_186",
     name: "bolsas de basura grandes x10",
     category: "Limpieza",
-    keywords: ["bolsas", "basura", "grandes"],
+    keywords: ["bolsas", "basura", "residuos", "grandes"],
   },
   {
     id: "prod_187",
@@ -950,37 +1046,37 @@ const initialCatalogData = [
     id: "prod_200",
     name: "jabon de tocador antibacterial barra 90g",
     category: "Cuidado Personal",
-    keywords: ["jabon", "tocador", "antibacterial", "protex"],
+    keywords: ["jabon", "tocador", "antibacterial", "protex", "barra"],
   },
   {
     id: "prod_201",
     name: "jabon liquido corporal 400ml",
     category: "Cuidado Personal",
-    keywords: ["jabon", "liquido", "corporal", "ducha"],
+    keywords: ["jabon", "liquido", "corporal", "ducha", "bano"],
   },
   {
     id: "prod_202",
     name: "shampoo para cabello 400ml",
     category: "Cuidado Personal",
-    keywords: ["shampoo", "cabello", "pantene", "head"],
+    keywords: ["shampoo", "champu", "cabello", "pantene", "head"],
   },
   {
     id: "prod_203",
     name: "acondicionador para cabello 400ml",
     category: "Cuidado Personal",
-    keywords: ["acondicionador", "cabello"],
+    keywords: ["acondicionador", "cabello", "enjuague"],
   },
   {
     id: "prod_204",
-    name: "crema dental anticaries 100ml",
+    name: "crema dental anticaries 100g",
     category: "Cuidado Personal",
-    keywords: ["crema", "dental", "colgate", "pasta"],
+    keywords: ["crema dental", "pasta dental", "dentifrico", "colgate"],
   },
   {
     id: "prod_205",
     name: "cepillo de dientes cerdas medias x2",
     category: "Cuidado Personal",
-    keywords: ["cepillo", "dientes"],
+    keywords: ["cepillo", "dientes", "dental"],
   },
   {
     id: "prod_206",
@@ -990,7 +1086,7 @@ const initialCatalogData = [
   },
   {
     id: "prod_207",
-    name: "desodorante antitranspirante roll-on 50ml",
+    name: "desodorante antitranspirante roll on 50ml",
     category: "Cuidado Personal",
     keywords: ["desodorante", "antitranspirante", "roll on"],
   },
@@ -998,31 +1094,31 @@ const initialCatalogData = [
     id: "prod_208",
     name: "desodorante en aerosol 150ml",
     category: "Cuidado Personal",
-    keywords: ["desodorante", "aerosol"],
+    keywords: ["desodorante", "aerosol", "spray"],
   },
   {
     id: "prod_209",
-    name: "papel tto / pañuelos faciales caja",
+    name: "panuelos faciales caja",
     category: "Cuidado Personal",
-    keywords: ["pañuelos", "faciales", "kleenex"],
+    keywords: ["panuelos", "faciales", "kleenex", "tissue"],
   },
   {
     id: "prod_210",
     name: "toallas sanitarias femeninas x10",
     category: "Cuidado Personal",
-    keywords: ["toallas", "sanitarias", "femeninas", "diarias"],
+    keywords: ["toallas", "sanitarias", "femeninas", "compresas"],
   },
   {
     id: "prod_211",
     name: "protectores diarios femeninos x20",
     category: "Cuidado Personal",
-    keywords: ["protectores", "diarios"],
+    keywords: ["protectores", "diarios", "femeninos"],
   },
   {
     id: "prod_212",
-    name: "maquillas de afeitar desechables x2",
+    name: "maquinas de afeitar desechables x2",
     category: "Cuidado Personal",
-    keywords: ["maquina", "afeitar", "gillette"],
+    keywords: ["maquina", "afeitar", "gillette", "rastrillo", "cuchilla"],
   },
   {
     id: "prod_213",
@@ -1032,15 +1128,15 @@ const initialCatalogData = [
   },
   {
     id: "prod_214",
-    name: "pañales desechables etapa 3 x20",
+    name: "panales desechables etapa 3 x20",
     category: "Cuidado Personal",
-    keywords: ["pañales", "bebe", "etapa 3"],
+    keywords: ["panales", "bebe", "etapa 3", "pampers", "huggies"],
   },
   {
     id: "prod_215",
-    name: "pañales desechables etapa 4 x20",
+    name: "panales desechables etapa 4 x20",
     category: "Cuidado Personal",
-    keywords: ["pañales", "bebe", "etapa 4"],
+    keywords: ["panales", "bebe", "etapa 4", "pampers", "huggies"],
   },
   {
     id: "prod_216",
@@ -1052,7 +1148,7 @@ const initialCatalogData = [
     id: "prod_217",
     name: "talco para bebe 200g",
     category: "Cuidado Personal",
-    keywords: ["talco", "bebe"],
+    keywords: ["talco", "bebe", "polvo"],
   },
   {
     id: "prod_218",
@@ -1062,14 +1158,36 @@ const initialCatalogData = [
   },
   {
     id: "prod_219",
-    name: "bloqueador solar protector spf 50 120ml",
+    name: "bloqueador solar spf 50 120ml",
     category: "Cuidado Personal",
-    keywords: ["bloqueador", "solar", "protector"],
+    keywords: ["bloqueador", "protector solar", "spf", "filtro solar"],
   },
   {
     id: "prod_220",
-    name: "alcohol isopropilico / etilico antiseptico 500ml",
+    name: "alcohol antiseptico 500ml",
     category: "Cuidado Personal",
-    keywords: ["alcohol", "antiseptico"],
+    keywords: ["alcohol", "isopropilico", "etilico", "antiseptico"],
   },
 ];
+
+// Comprobación al cargar: avisa en la consola si hay ids repetidos o nombres
+// que no estén normalizados (ver reglas al inicio del archivo).
+(function validateCatalog() {
+  const ids = new Set();
+  const names = new Set();
+  initialCatalogData.forEach((product) => {
+    if (ids.has(product.id)) console.warn("Catálogo: id repetido:", product.id);
+    if (names.has(product.name))
+      console.warn("Catálogo: nombre repetido:", product.name);
+    ids.add(product.id);
+    names.add(product.name);
+    if (
+      typeof normalizeProductName === "function" &&
+      normalizeProductName(product.name) !== product.name
+    ) {
+      console.warn(
+        `Catálogo: "${product.name}" no está normalizado (queda como "${normalizeProductName(product.name)}")`,
+      );
+    }
+  });
+})();

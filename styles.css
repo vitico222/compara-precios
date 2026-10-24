@@ -1,15 +1,18 @@
 /* ========================================== */
-/* 1. VARIABLES Y CONFIGURACIÓN GLOBAL (REM)  */
+/* 1. VARIABLES Y CONFIGURACIÓN GLOBAL        */
 /* ========================================== */
 :root {
   --primary-blue: #0d3b66;
   --accent-teal: #00a8cc;
+  --accent-text: #007c95; /* Teal más oscuro: contraste suficiente para texto */
   --bright-cyan: #00c2cb;
   --bg-color: #f4f7f6;
   --card-bg: #ffffff;
   --text-color: #2b2d42;
-  --text-muted: #8d99ae;
+  --text-muted: #5d6b82; /* Antes #8d99ae: no alcanzaba contraste sobre blanco */
   --success-color: #2a9d8f;
+  --danger-color: #c0392b;
+  --border-color: #ced4da;
   --shadow-light: 0 4px 6px rgba(0, 0, 0, 0.08);
   --shadow-3d:
     0 8px 15px rgba(13, 59, 102, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
@@ -17,16 +20,17 @@
     0 12px 20px rgba(0, 168, 204, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --border-radius: 1.2rem;
   --transition-speed: 0.25s ease;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 body {
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-color);
   font-size: 1rem;
@@ -34,7 +38,34 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding-bottom: 5rem; /* Espacio para el menú inferior en móviles */
+  /* Espacio para el menú inferior en móviles */
+  padding-bottom: calc(5rem + var(--safe-bottom));
+}
+
+/* Los controles de formulario heredan la tipografía de la página */
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* Foco visible para teclado (accesibilidad) */
+:focus-visible {
+  outline: 3px solid var(--accent-teal);
+  outline-offset: 2px;
+}
+
+[role="button"] {
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
 }
 
 /* ========================================== */
@@ -43,10 +74,11 @@ body {
 .app-header {
   background: linear-gradient(135deg, var(--primary-blue), var(--accent-teal));
   color: #ffffff;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   position: sticky;
   top: 0;
@@ -65,17 +97,19 @@ body {
 }
 
 .app-logo {
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #ffffff;
+  flex: none;
 }
 
 .app-header h1 {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: 0.03rem;
+  line-height: 1.2;
 }
 
 .user-location-badge {
@@ -86,8 +120,14 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  cursor: pointer;
+  max-width: 50%;
   transition: var(--transition-speed);
+}
+
+.user-location-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-location-badge:hover {
@@ -125,6 +165,21 @@ body {
   }
 }
 
+.app-view h2 {
+  color: var(--primary-blue);
+  margin-bottom: 0.4rem;
+}
+
+.section-subtitle {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.view-header-action {
+  margin-bottom: 1rem;
+}
+
 .card-3d,
 .welcome-banner,
 .dash-card,
@@ -142,7 +197,7 @@ body {
 }
 
 /* ========================================== */
-/* 4. BOTONES Y NAVEGACIÓN INTERNA (UX)       */
+/* 4. BOTONES Y NAVEGACIÓN INTERNA            */
 /* ========================================== */
 .btn-3d {
   width: 100%;
@@ -160,6 +215,7 @@ body {
   transition: all 0.2s ease;
   text-transform: uppercase;
   letter-spacing: 0.05rem;
+  margin-bottom: 0.75rem;
 }
 
 .primary-btn {
@@ -194,11 +250,27 @@ body {
   box-shadow: none;
 }
 
-/* Botones de retorno (Evitar calles sin salida) */
+/* Botón pequeño ("Cambiar foto") */
+.btn-secondary {
+  background: #e9ecef;
+  border: 1px solid var(--border-color);
+  border-radius: 2rem;
+  padding: 0.45rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-speed);
+}
+
+.btn-secondary:hover {
+  background: #dee2e6;
+}
+
+/* Botones de retorno */
 .btn-back {
   background: transparent;
-  border: 1px solid var(--accent-teal);
-  color: var(--accent-teal);
+  border: 1px solid var(--accent-text);
+  color: var(--accent-text);
   padding: 0.5rem 1rem;
   border-radius: 2rem;
   font-size: 0.9rem;
@@ -215,6 +287,15 @@ body {
   transform: translateY(-1px);
 }
 
+/* Botón de texto (ej. "Inicio" dentro de resultados) */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
 /* ========================================== */
 /* 5. VISTA DASHBOARD E INICIO                */
 /* ========================================== */
@@ -228,7 +309,6 @@ body {
 }
 
 .welcome-banner h2 {
-  color: var(--primary-blue);
   font-size: 1.4rem;
   margin-bottom: 0.5rem;
 }
@@ -245,8 +325,6 @@ body {
 }
 
 .dash-card {
-  background: var(--card-bg);
-  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -255,6 +333,7 @@ body {
   padding: 2rem 1rem;
   cursor: pointer;
   text-align: center;
+  margin-bottom: 0;
 }
 
 .dash-card i {
@@ -280,11 +359,13 @@ body {
   text-align: center;
   border: 2px dashed var(--accent-teal);
   background: #fafcfd;
-  cursor: pointer;
 }
 
+/* Ahora es un <label>: debe ser bloque y clicable */
 .upload-trigger {
+  display: block;
   padding: 2rem 1rem;
+  cursor: pointer;
 }
 
 .upload-trigger i {
@@ -293,11 +374,29 @@ body {
   margin-bottom: 1rem;
 }
 
+.upload-trigger p {
+  color: var(--text-muted);
+}
+
 #image-preview-container img {
   max-width: 100%;
   max-height: 20rem;
   border-radius: 0.8rem;
   margin-bottom: 1rem;
+}
+
+.scan-status {
+  padding: 0.8rem 1rem;
+  border-radius: 0.8rem;
+  margin-bottom: 1rem;
+  background: #e8f6fa;
+  color: var(--primary-blue);
+  font-size: 0.95rem;
+}
+
+.scan-status.error {
+  background: #fdecea;
+  color: var(--danger-color);
 }
 
 /* ========================================== */
@@ -332,8 +431,43 @@ body {
   padding: 0.5rem;
 }
 
+.ticket-divider {
+  margin: 0.5rem 0;
+  border: none;
+  border-top: 1px dashed #b8c2cc;
+}
+
+.ticket-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ticket-item {
+  margin-bottom: 0.6rem;
+}
+
+.ticket-hint {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.ticket-hint.empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.ticket-total {
+  text-align: right;
+  font-weight: 700;
+}
+
+.ticket-total.optimized {
+  color: var(--success-color);
+}
+
 /* ========================================== */
-/* 8. LISTA DE COMPRAS E INFORMES INDIVIDUALES*/
+/* 8. LISTA DE COMPRAS Y RESULTADOS           */
 /* ========================================== */
 .shopping-input-group {
   display: flex;
@@ -348,6 +482,7 @@ body {
 .shopping-input-group button {
   width: auto;
   padding: 0 1.25rem;
+  margin-bottom: 0;
 }
 
 .shopping-list-ul {
@@ -356,7 +491,43 @@ body {
   margin-bottom: 1.25rem;
 }
 
-/* Tarjetas individuales separadas para resultados de lista inteligente */
+.shopping-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #e5e9ec;
+}
+
+.shopping-item-name i {
+  color: var(--accent-teal);
+  margin-right: 0.5rem;
+}
+
+.btn-icon-danger {
+  background: none;
+  border: none;
+  color: var(--danger-color);
+  cursor: pointer;
+  padding: 0.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.optimization-header {
+  margin: 1.5rem 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.optimization-header h3 {
+  font-size: 1.1rem;
+  color: var(--primary-blue);
+}
+
+/* Tarjetas individuales de resultados (lista y búsqueda) */
 .product-result-card {
   background: var(--card-bg);
   border-radius: 0.8rem;
@@ -372,6 +543,39 @@ body {
   box-shadow: var(--shadow-3d);
 }
 
+.result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.result-title {
+  font-size: 1rem;
+  text-transform: capitalize;
+}
+
+.result-query {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.price-status {
+  color: var(--success-color);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.price-empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.search-results-list {
+  margin-top: 0.5rem;
+}
+
 /* ========================================== */
 /* 9. NAVEGACIÓN INFERIOR (PWA MOBILE)        */
 /* ========================================== */
@@ -384,6 +588,7 @@ body {
   display: flex;
   justify-content: space-around;
   padding: 0.6rem 0;
+  padding-bottom: calc(0.6rem + var(--safe-bottom));
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
   z-index: 1000;
 }
@@ -398,6 +603,7 @@ body {
   color: var(--text-muted);
   font-size: 0.75rem;
   cursor: pointer;
+  min-width: 4rem;
   transition: var(--transition-speed);
 }
 
@@ -407,11 +613,11 @@ body {
 
 .nav-item.active,
 .nav-item:hover {
-  color: var(--accent-teal);
+  color: var(--accent-text);
 }
 
 /* ========================================== */
-/* 10. MODALES Y POP-UPS                      */
+/* 10. MODALES, FORMULARIOS Y AVISOS          */
 /* ========================================== */
 .modal-overlay {
   position: fixed;
@@ -422,15 +628,15 @@ body {
   background: rgba(13, 59, 102, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 2000;
   padding: 1rem;
+  overflow-y: auto; /* El formulario regional es largo en pantallas pequeñas */
 }
 
 .modal-content {
   width: 100%;
   max-width: 28rem;
+  margin: auto; /* Centra y permite desplazar si no cabe */
   animation: zoomIn 0.3s ease;
 }
 
@@ -443,6 +649,28 @@ body {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.modal-header h2 {
+  font-size: 1.3rem;
+  color: var(--primary-blue);
+}
+
+.modal-icon {
+  font-size: 1.8rem;
+  color: var(--accent-teal);
+}
+
+.modal-content > p {
+  color: var(--text-muted);
+  margin-bottom: 1.2rem;
 }
 
 .form-group {
@@ -464,9 +692,10 @@ body {
 .shopping-input-group input {
   width: 100%;
   padding: 0.8rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border-color);
   border-radius: 0.8rem;
   font-size: 1rem;
+  background: #ffffff;
   outline: none;
   transition: var(--transition-speed);
 }
@@ -480,6 +709,16 @@ body {
   box-shadow: 0 0 0 3px rgba(0, 168, 204, 0.15);
 }
 
+.filter-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.filter-row select {
+  flex: 1;
+}
+
 .alert-content {
   text-align: center;
 }
@@ -490,8 +729,21 @@ body {
   margin-bottom: 1rem;
 }
 
-.hidden {
-  display: none !important;
+/* Aviso breve flotante */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(5.5rem + var(--safe-bottom));
+  transform: translateX(-50%);
+  max-width: min(90vw, 26rem);
+  background: var(--primary-blue);
+  color: #ffffff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 2rem;
+  box-shadow: var(--shadow-3d);
+  font-size: 0.95rem;
+  text-align: center;
+  z-index: 3000;
 }
 
 /* ========================================== */
@@ -514,11 +766,34 @@ body {
     padding: 2rem;
   }
 
+  .app-logo {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+
   .bottom-nav {
     display: none;
   }
 
+  .toast {
+    bottom: 2rem;
+  }
+
   body {
     padding-bottom: 2rem;
+  }
+}
+
+/* Respeta a quien pide menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

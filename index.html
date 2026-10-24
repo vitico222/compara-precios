@@ -4,39 +4,65 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Compara Precios</title>
+    <meta
+      name="description"
+      content="Escanea tus recibos y compara precios de supermercado para ahorrar en cada compra."
+    />
 
-    <!-- Enlace a la hoja de estilos personalizada -->
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#0d3b66" />
+    <link rel="icon" href="assets/logo_compara_precios.png" />
+    <link rel="apple-touch-icon" href="assets/logo_compara_precios.png" />
+
+    <!-- Estilos -->
     <link rel="stylesheet" href="styles.css" />
-
-    <!-- CDN de FontAwesome para iconos profesionales -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#0d3b66" />
 
-    <!-- CDN de Fuse.js para el Fuzzy Matching (Coincidencia aproximada de productos) -->
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
-
-    <!-- CDN de Firebase (App, Auth y Firestore) versión compat para facilitar integración -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Librerías externas (versiones fijas). "defer" mantiene el orden de ejecución -->
+    <script defer src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <script
+      defer
+      src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"
+    ></script>
+    <script
+      defer
+      src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"
+    ></script>
+    <script
+      defer
+      src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"
+    ></script>
   </head>
   <body>
+    <noscript>
+      Compara Precios necesita JavaScript activado para funcionar.
+    </noscript>
+
     <!-- ========================================== -->
-    <!-- 1. POP-UP REGIONAL INICIAL (PAÍS Y MONEDA) -->
+    <!-- 1. VENTANA REGIONAL (PAÍS, UBICACIÓN, MONEDA) -->
+    <!-- Oculta por defecto: script.js la muestra solo si falta la configuración -->
     <!-- ========================================== -->
-    <div id="regional-modal" class="modal-overlay">
-      <div class="modal-content 3d-card">
+    <div id="regional-modal" class="modal-overlay hidden">
+      <div
+        class="modal-content card-3d"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="regional-title"
+      >
         <div class="modal-header">
-          <i class="fa-solid fa-earth-americas modal-icon"></i>
-          <h2>Bienvenido a Compara Precios</h2>
+          <i
+            class="fa-solid fa-earth-americas modal-icon"
+            aria-hidden="true"
+          ></i>
+          <h2 id="regional-title">Bienvenido a Compara Precios</h2>
         </div>
         <p>
-          Selecciona tu ubicación y moneda local para optimizar tu experiencia
-          de ahorro.
+          Indica dónde compras y tu moneda local. Así comparamos solo precios
+          que son realmente comparables.
         </p>
 
         <form id="regional-form">
@@ -44,47 +70,80 @@
             <label for="select-country">País:</label>
             <select id="select-country" required>
               <option value="" disabled selected>Selecciona tu país</option>
-              <option value="VE">Venezuela</option>
-              <option value="CO">Colombia</option>
-              <option value="AR">Argentina</option>
-              <option value="CL">Chile</option>
-              <option value="MX">México</option>
-              <option value="PE">Perú</option>
-              <option value="ES">España</option>
-              <option value="US">Estados Unidos</option>
+              <option value="VE" data-currency="VES">Venezuela</option>
+              <option value="CO" data-currency="COP">Colombia</option>
+              <option value="AR" data-currency="ARS">Argentina</option>
+              <option value="CL" data-currency="CLP">Chile</option>
+              <option value="MX" data-currency="MXN">México</option>
+              <option value="PE" data-currency="PEN">Perú</option>
+              <option value="ES" data-currency="EUR">España</option>
+              <option value="US" data-currency="USD">Estados Unidos</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label for="select-currency">Moneda Local:</label>
+            <label for="input-state">Estado / Provincia:</label>
+            <input
+              type="text"
+              id="input-state"
+              placeholder="Ej: Aragua"
+              autocomplete="address-level1"
+              maxlength="60"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="input-city">Ciudad:</label>
+            <input
+              type="text"
+              id="input-city"
+              placeholder="Ej: Maracay"
+              autocomplete="address-level2"
+              maxlength="60"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="select-currency">Moneda local:</label>
             <select id="select-currency" required>
               <option value="" disabled selected>Selecciona la moneda</option>
               <option value="VES">Bolívar (VES - Bs.)</option>
-              <option value="USD">Dólar Estadounidense (USD - $)</option>
+              <option value="USD">Dólar estadounidense (USD - $)</option>
               <option value="EUR">Euro (EUR - €)</option>
-              <option value="COP">Peso Colombiano (COP - $)</option>
-              <option value="ARS">Peso Argentino (ARS - $)</option>
-              <option value="CLP">Peso Chileno (CLP - $)</option>
-              <option value="MXN">Peso Mexicano (MXN - $)</option>
-              <option value="PEN">Sol Peruano (PEN - S/)</option>
+              <option value="COP">Peso colombiano (COP - $)</option>
+              <option value="ARS">Peso argentino (ARS - $)</option>
+              <option value="CLP">Peso chileno (CLP - $)</option>
+              <option value="MXN">Peso mexicano (MXN - $)</option>
+              <option value="PEN">Sol peruano (PEN - S/)</option>
             </select>
           </div>
 
           <button type="submit" class="btn-3d primary-btn">
-            Guardar y Comenzar
+            Guardar y comenzar
+          </button>
+          <!-- Solo visible cuando ya existe una región guardada -->
+          <button
+            type="button"
+            id="btn-cancel-region"
+            class="btn-3d secondary-btn hidden"
+          >
+            Cancelar
           </button>
         </form>
       </div>
     </div>
 
     <!-- ========================================== -->
-    <!-- 2. HEADER / BARRA SUPERIOR (LOGO CLICABLE) -->
+    <!-- 2. HEADER / BARRA SUPERIOR                 -->
     <!-- ========================================== -->
     <header class="app-header">
       <div
         class="logo-container"
-        onclick="switchView('home')"
-        style="cursor: pointer"
+        data-view="home"
+        role="button"
+        tabindex="0"
         title="Ir al inicio"
       >
         <img
@@ -97,10 +156,12 @@
       <div
         class="user-location-badge"
         id="btn-change-region"
+        role="button"
+        tabindex="0"
         title="Cambiar región"
       >
-        <i class="fa-solid fa-location-dot"></i>
-        <span id="display-location">Maracay, VE</span>
+        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+        <span id="display-location">Selecciona tu región</span>
       </div>
     </header>
 
@@ -108,7 +169,7 @@
     <!-- 3. CONTENEDOR PRINCIPAL DE VISTAS (SPA)    -->
     <!-- ========================================== -->
     <main class="app-main-container">
-      <!-- VISTA 1: DASHBOARD / INICIO -->
+      <!-- VISTA 1: INICIO -->
       <section id="view-home" class="app-view active-view">
         <div class="welcome-banner card-3d">
           <h2>¡Ahorra en cada compra!</h2>
@@ -119,96 +180,110 @@
         </div>
 
         <div class="dashboard-grid">
-          <button class="dash-card card-3d" onclick="switchView('scan')">
-            <i class="fa-solid fa-camera-retro"></i>
-            <span>Escanear Recibo</span>
+          <button type="button" class="dash-card card-3d" data-view="scan">
+            <i class="fa-solid fa-camera-retro" aria-hidden="true"></i>
+            <span>Escanear recibo</span>
           </button>
-          <button class="dash-card card-3d" onclick="switchView('list')">
-            <i class="fa-solid fa-list-check"></i>
-            <span>Lista Inteligente</span>
+          <button type="button" class="dash-card card-3d" data-view="list">
+            <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+            <span>Lista inteligente</span>
           </button>
-          <button class="dash-card card-3d" onclick="switchView('search')">
-            <i class="fa-solid fa-magnifying-glass-dollar"></i>
-            <span>Consultar Precios</span>
+          <button type="button" class="dash-card card-3d" data-view="search">
+            <i
+              class="fa-solid fa-magnifying-glass-dollar"
+              aria-hidden="true"
+            ></i>
+            <span>Consultar precios</span>
           </button>
         </div>
       </section>
 
-      <!-- VISTA 2: ESCANEAR RECIBO CON IA (GEMINI) -->
+      <!-- VISTA 2: ESCANEAR RECIBO CON IA -->
       <section id="view-scan" class="app-view">
-        <div class="view-header-action" style="margin-bottom: 1rem">
-          <button onclick="switchView('home')" class="btn-back">
-            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+        <div class="view-header-action">
+          <button type="button" data-view="home" class="btn-back">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver al
+            inicio
           </button>
         </div>
 
-        <h2>Escanear Recibo de Compra</h2>
+        <h2>Escanear recibo de compra</h2>
         <p class="section-subtitle">
           Toma una foto clara de tu ticket o cárgala desde tu galería.
         </p>
 
         <div class="upload-zone card-3d">
-          <input
-            type="file"
-            id="receipt-file-input"
-            accept="image/*"
-            capture="environment"
-            hidden
-          />
-          <div
-            class="upload-trigger"
-            onclick="document.getElementById('receipt-file-input').click()"
-          >
-            <i class="fa-solid fa-cloud-arrow-up"></i>
-            <p>Pulsa aquí para tomar o cargar foto</p>
-          </div>
+          <!-- Sin "capture": así el móvil ofrece cámara o galería -->
+          <input type="file" id="receipt-file-input" accept="image/*" hidden />
+          <label class="upload-trigger" for="receipt-file-input">
+            <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+            <p>Pulsa aquí para tomar o cargar una foto</p>
+          </label>
           <div id="image-preview-container" class="hidden">
             <img id="receipt-preview" alt="Vista previa del recibo" />
-            <button id="btn-remove-image" class="btn-secondary">
+            <button type="button" id="btn-remove-image" class="btn-secondary">
               Cambiar foto
             </button>
           </div>
         </div>
 
-        <button id="btn-process-receipt" class="btn-3d primary-btn" disabled>
-          <i class="fa-solid fa-brain"></i> Analizar Recibo con IA
+        <!-- Mensajes de estado y errores (reemplaza a alert()) -->
+        <p
+          id="scan-status"
+          class="scan-status hidden"
+          role="status"
+          aria-live="polite"
+        ></p>
+
+        <button
+          type="button"
+          id="btn-process-receipt"
+          class="btn-3d primary-btn"
+          disabled
+        >
+          <i class="fa-solid fa-brain" aria-hidden="true"></i> Analizar recibo
+          con IA
         </button>
       </section>
 
       <!-- VISTA 3: TICKETS PARALELOS (COMPARACIÓN) -->
       <section id="view-compare" class="app-view">
-        <h2>Resultado de Comparación</h2>
+        <div class="view-header-action">
+          <button type="button" data-view="scan" class="btn-back">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Escanear
+            otro recibo
+          </button>
+        </div>
+
+        <h2>Resultado de la comparación</h2>
         <div class="tickets-container">
-          <!-- Lado Izquierdo: Tu Recibo Real -->
+          <!-- Izquierda: tu recibo real -->
           <div class="ticket-box card-3d">
-            <h3>Tu Recibo Actual</h3>
-            <div id="left-ticket-content" class="ticket-receipt-body">
-              <!-- Se llena dinámicamente con JS -->
-            </div>
+            <h3>Tu recibo actual</h3>
+            <div id="left-ticket-content" class="ticket-receipt-body"></div>
           </div>
 
-          <!-- Lado Derecho: Recibo Optimizado -->
+          <!-- Derecha: mejores precios de la comunidad -->
           <div class="ticket-box card-3d highlight-ticket">
-            <h3>Mejor Opción (Último Mes)</h3>
-            <div id="right-ticket-content" class="ticket-receipt-body">
-              <!-- Se llena dinámicamente con JS -->
-            </div>
+            <h3>Mejor opción (último mes)</h3>
+            <div id="right-ticket-content" class="ticket-receipt-body"></div>
           </div>
         </div>
-        <button class="btn-3d secondary-btn" onclick="switchView('home')">
-          Volver al Inicio
+        <button type="button" class="btn-3d secondary-btn" data-view="home">
+          Volver al inicio
         </button>
       </section>
 
       <!-- VISTA 4: LISTA DE COMPRAS INTELIGENTE -->
       <section id="view-list" class="app-view">
-        <div class="view-header-action" style="margin-bottom: 1rem">
-          <button onclick="switchView('home')" class="btn-back">
-            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+        <div class="view-header-action">
+          <button type="button" data-view="home" class="btn-back">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver al
+            inicio
           </button>
         </div>
 
-        <h2>Mi Lista de Compras Inteligente</h2>
+        <h2>Mi lista de compras inteligente</h2>
         <p class="section-subtitle">
           Agrega los productos que necesitas y te diremos dónde comprarlos más
           barato.
@@ -218,101 +293,129 @@
           <input
             type="text"
             id="shopping-item-input"
-            placeholder="Ej: 1 kg de Azúcar, Leche..."
+            placeholder="Ej: 1 kg de azúcar, leche..."
+            aria-label="Producto a agregar a la lista"
+            maxlength="80"
           />
-          <button id="btn-add-shopping-item" class="btn-3d primary-btn">
-            <i class="fa-solid fa-plus"></i>
+          <button
+            type="button"
+            id="btn-add-shopping-item"
+            class="btn-3d primary-btn"
+            aria-label="Agregar producto"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
           </button>
         </div>
 
-        <ul id="shopping-list-items" class="shopping-list-ul">
-          <!-- Ítems dinámicos -->
-        </ul>
+        <ul id="shopping-list-items" class="shopping-list-ul"></ul>
 
-        <button id="btn-optimize-list" class="btn-3d success-btn hidden">
-          Optimizar mi Lista de Compras
+        <button
+          type="button"
+          id="btn-optimize-list"
+          class="btn-3d success-btn hidden"
+        >
+          Optimizar mi lista de compras
         </button>
 
-        <!-- Contenedor separado para tarjetas individuales de resultados -->
         <div id="optimization-result-container"></div>
       </section>
 
-      <!-- VISTA 5: BUSCADOR DE PRECIOS UNITARIOS -->
+      <!-- VISTA 5: CONSULTAR PRECIOS -->
       <section id="view-search" class="app-view">
-        <div class="view-header-action" style="margin-bottom: 1rem">
-          <button onclick="switchView('home')" class="btn-back">
-            <i class="fa-solid fa-arrow-left"></i> Volver al Inicio
+        <div class="view-header-action">
+          <button type="button" data-view="home" class="btn-back">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver al
+            inicio
           </button>
         </div>
 
-        <h2>Consultar Precios en la Ciudad</h2>
+        <h2>Consultar precios</h2>
         <div class="search-filters card-3d">
           <input
-            type="text"
+            type="search"
             id="product-search-input"
-            placeholder="¿Qué producto buscas? (Ej: Harina)"
+            placeholder="¿Qué producto buscas? (Ej: harina)"
+            aria-label="Producto a buscar"
+            maxlength="80"
           />
           <div class="filter-row">
-            <select id="filter-area">
-              <option value="city">Mi Ciudad</option>
-              <option value="state">Mi Estado / Provincia</option>
-              <option value="country">Todo el País</option>
+            <select id="filter-area" aria-label="Zona de búsqueda">
+              <option value="city">Mi ciudad</option>
+              <option value="state">Mi estado / provincia</option>
+              <option value="country">Todo el país</option>
             </select>
-            <select id="filter-time">
-              <option value="30">Último Mes</option>
-              <option value="90">Últimos 3 Meses</option>
+            <select id="filter-time" aria-label="Período de tiempo">
+              <option value="30">Último mes</option>
+              <option value="90">Últimos 3 meses</option>
             </select>
           </div>
         </div>
 
-        <div id="search-results-container" class="search-results-list">
-          <!-- Resultados de búsqueda -->
+        <div
+          id="search-results-container"
+          class="search-results-list"
+          aria-live="polite"
+        >
+          <p class="section-subtitle">
+            Escribe el nombre de un producto para ver sus precios.
+          </p>
         </div>
       </section>
     </main>
 
     <!-- ========================================== -->
-    <!-- 4. MENÚ DE NAVEGACIÓN INFERIOR (PWA NATIVE)  -->
+    <!-- 4. NAVEGACIÓN INFERIOR (PWA)               -->
     <!-- ========================================== -->
-    <nav class="bottom-nav">
-      <button class="nav-item active" onclick="switchView('home')">
-        <i class="fa-solid fa-house"></i>
+    <nav class="bottom-nav" aria-label="Navegación principal">
+      <button type="button" class="nav-item active" data-view="home">
+        <i class="fa-solid fa-house" aria-hidden="true"></i>
         <span>Inicio</span>
       </button>
-      <button class="nav-item" onclick="switchView('scan')">
-        <i class="fa-solid fa-camera"></i>
+      <button type="button" class="nav-item" data-view="scan">
+        <i class="fa-solid fa-camera" aria-hidden="true"></i>
         <span>Escanear</span>
       </button>
-      <button class="nav-item" onclick="switchView('list')">
-        <i class="fa-solid fa-list-check"></i>
+      <button type="button" class="nav-item" data-view="list">
+        <i class="fa-solid fa-list-check" aria-hidden="true"></i>
         <span>Listas</span>
       </button>
-      <button class="nav-item" onclick="switchView('search')">
-        <i class="fa-solid fa-magnifying-glass"></i>
+      <button type="button" class="nav-item" data-view="search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
         <span>Buscar</span>
       </button>
     </nav>
 
-    <!-- POP-UP CONDICIONAL DE AHORRO / COMPARACIÓN -->
+    <!-- AVISO CONDICIONAL DE AHORRO / COMPARACIÓN -->
     <div id="alert-modal" class="modal-overlay hidden">
-      <div class="modal-content card-3d alert-content">
+      <div
+        class="modal-content card-3d alert-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="alert-title"
+      >
         <div id="alert-icon-container">
-          <i class="fa-solid fa-circle-check success-icon"></i>
+          <i
+            class="fa-solid fa-circle-check success-icon"
+            aria-hidden="true"
+          ></i>
         </div>
         <h3 id="alert-title">¡Excelente!</h3>
         <p id="alert-message">
           Estás comprando en el lugar con mejores precios de la ciudad.
         </p>
-        <button class="btn-3d primary-btn" onclick="closeAlertModal()">
+        <button type="button" id="btn-close-alert" class="btn-3d primary-btn">
           Entendido
         </button>
       </div>
     </div>
 
-    <!-- Scripts externos y lógica -->
-    <script src="utils.js"></script>
-    <script src="catalog-data.js"></script>
-    <script src="config.js"></script>
-    <script src="script.js"></script>
+    <!-- Mensajes breves (guardado, errores leves) -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <!-- Scripts propios (orden importante). Ya no se carga config.js:
+         la clave de Gemini vive en Netlify, no en el navegador. -->
+    <script defer src="utils.js"></script>
+    <script defer src="catalog-data.js"></script>
+    <script defer src="script.js"></script>
   </body>
 </html>
