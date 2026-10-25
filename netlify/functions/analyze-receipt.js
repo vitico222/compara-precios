@@ -57,7 +57,10 @@ exports.handler = async (event) => {
     return reply(405, { error: "Método no permitido." });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Quita espacios, saltos de línea y comillas que se cuelan al pegar la clave
+  const apiKey = (process.env.GEMINI_API_KEY || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
   if (!apiKey) {
     return reply(500, {
       error: "El servidor no tiene configurada la clave de Gemini.",
@@ -96,25 +99,51 @@ exports.handler = async (event) => {
     headers["Api-Revision"] = process.env.GEMINI_API_REVISION;
   }
 
+  // Netlify corta las funciones a los 10 s (plan gratuito). Cortamos un poco antes
+  // para devolver un mensaje claro en lugar de un 504 genérico.
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS) || 9000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+
   let response;
+  let raw;
   try {
     response = await fetch(API_URL, {
       method: "POST",
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
         input: [
           { type: "text", text: buildPrompt(safeCurrency, safeCountry) },
           { type: "image", data: imageBase64, mime_type: mimeType },
         ],
+        // Menos razonamiento = respuesta mucho más rápida (leer un ticket es sobre todo OCR)
+        generation_config: {
+          thinking_level: process.env.GEMINI_THINKING_LEVEL || "low",
+          max_output_tokens: 8192,
+        },
       }),
     });
+    raw = await response.text();
   } catch (error) {
+    if (error.name === "AbortError") {
+      console.error(`Gemini no respondió en ${timeoutMs} ms`);
+      return reply(504, {
+        error:
+          "El análisis tardó demasiado. Inténtalo de nuevo; si se repite, prueba con una foto más nítida.",
+      });
+    }
     console.error("No se pudo contactar con Gemini:", error.message);
     return reply(502, { error: "No se pudo contactar con el servicio de IA." });
+  } finally {
+    clearTimeout(timer);
   }
+  console.log(
+    `Gemini respondió ${response.status} en ${Date.now() - startedAt} ms`,
+  );
 
-  const raw = await response.text();
   let data = null;
   try {
     data = JSON.parse(raw);
@@ -131,8 +160,20 @@ exports.handler = async (event) => {
       });
     }
     const detail = data?.error?.message || "petición fallida";
+    const reason =
+      data?.error?.details?.find((d) => d.reason)?.reason ||
+      data?.error?.status ||
+      "";
+    const code = reason
+      ? `${response.status} · ${reason}`
+      : `${response.status}`;
+    if (response.status === 401 || response.status === 403) {
+      return reply(502, {
+        error: `Google rechazó la clave de Gemini (${code}). Revisa GEMINI_API_KEY en Netlify y vuelve a desplegar.`,
+      });
+    }
     return reply(502, {
-      error: `Error del servicio de IA (${response.status}): ${detail}`,
+      error: `Error del servicio de IA (${code}): ${detail}`,
     });
   }
 

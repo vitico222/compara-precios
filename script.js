@@ -504,6 +504,11 @@ async function requestReceiptAnalysis(dataUrl) {
   }
 
   if (!response.ok) {
+    if (response.status === 504 && !payload?.error) {
+      throw new Error(
+        "El análisis tardó demasiado. Inténtalo de nuevo en unos segundos.",
+      );
+    }
     if (response.status === 404 && !payload) {
       throw new Error(
         "El servicio de análisis no está disponible. Si pruebas en local, ejecuta «netlify dev».",
