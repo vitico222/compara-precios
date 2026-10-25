@@ -25,7 +25,10 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 
 const SETTINGS = {
-  analyzeEndpoint: "/.netlify/functions/analyze-receipt",
+  // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
+  // No es secreta: la clave de Gemini vive solo dentro del Worker.
+  analyzeEndpoint: "https://vitico222.workers.dev",
+  analyzeTimeoutMs: 60000,
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
   jpegQuality: 0.8,
   fuseThreshold: 0.35,
@@ -478,22 +481,31 @@ async function requestReceiptAnalysis(dataUrl) {
     header.split(";")[0].split(":")[1] || "image/jpeg"
   ).toLowerCase();
 
+  const params = new URLSearchParams({
+    mime: mimeType,
+    currency: AppState.currency,
+    country: AppState.country,
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SETTINGS.analyzeTimeoutMs);
+
   let response;
   try {
-    response = await fetch(SETTINGS.analyzeEndpoint, {
+    // text/plain evita la petición previa (preflight) de CORS
+    response = await fetch(`${SETTINGS.analyzeEndpoint}?${params}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        imageBase64: base64Data,
-        mimeType,
-        currency: AppState.currency,
-        country: AppState.country,
-      }),
+      headers: { "Content-Type": "text/plain" },
+      body: base64Data,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
     throw new Error(
-      "No se pudo conectar con el servicio de análisis. Revisa tu conexión.",
+      error.name === "AbortError"
+        ? "El análisis tardó demasiado. Inténtalo de nuevo."
+        : "No se pudo conectar con el servicio de análisis. Revisa tu conexión.",
     );
+  } finally {
+    clearTimeout(timer);
   }
 
   let payload = null;
@@ -511,7 +523,7 @@ async function requestReceiptAnalysis(dataUrl) {
     }
     if (response.status === 404 && !payload) {
       throw new Error(
-        "El servicio de análisis no está disponible. Si pruebas en local, ejecuta «netlify dev».",
+        "El servicio de análisis no está disponible. Revisa la URL del Worker.",
       );
     }
     throw new Error(
