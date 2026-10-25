@@ -3,20 +3,26 @@
 /* ========================================== */
 // Pega este código en: Cloudflare → Workers & Pages → tu Worker → Edit code.
 //
-// Variables que debes crear en Settings → Variables and Secrets:
-//   GEMINI_API_KEY        (tipo Secret)  tu clave de Gemini
-//   ALLOWED_ORIGINS       (tipo Text)    webs autorizadas, separadas por comas. Ej:
-//                         https://TU-SITIO.netlify.app,http://localhost:8888
-// Opcionales (tipo Text):
-//   GEMINI_MODEL          por defecto "gemini-3.8-flash"
-//   GEMINI_THINKING_LEVEL por defecto "low" (también: "minimal", "medium", "high")
-//   GEMINI_API_REVISION   si se define, se envía como cabecera Api-Revision
+// Variables en Settings → Variables and Secrets:
+//   GEMINI_API_KEY          (Secret)  tu clave de Gemini
+//   ALLOWED_ORIGINS         (Text)    webs autorizadas, separadas por comas. Ej:
+//                           https://TU-SITIO.netlify.app,http://localhost:8888
+// Opcionales (Text):
+//   GEMINI_MODEL            modelo principal. Por defecto "gemini-3.8-flash"
+//   GEMINI_FALLBACK_MODEL   modelo de respaldo si el principal está saturado.
+//                           Por defecto "gemini-2.5-flash". Usa "none" para desactivarlo
+//   GEMINI_THINKING_LEVEL   por defecto "low" (también "minimal", "medium", "high")
+//   GEMINI_API_REVISION     si se define, se envía como cabecera Api-Revision
 
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BASE64_LENGTH = 6 * 1024 * 1024; // ~4,5 MB de imagen real
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
-const GEMINI_TIMEOUT_MS = 55000;
+
+const TOTAL_BUDGET_MS = 55000; // tiempo máximo total (la app espera hasta 60 s)
+const ATTEMPT_TIMEOUT_MS = 25000; // tiempo máximo de cada intento
+const RETRY_DELAY_MS = 2000; // pausa antes de reintentar
+const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
 
 // El prompt vive en el servidor: así nadie puede usar tu clave para otras tareas
 function buildPrompt(currency, country) {
@@ -58,6 +64,76 @@ function corsHeaders(origin) {
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Se arma el JSON como texto para no volver a procesar la imagen completa
+function buildRequestBody({
+  model,
+  thinkingLevel,
+  prompt,
+  mimeType,
+  imageBase64,
+}) {
+  const generationConfig = thinkingLevel
+    ? '{"thinking_level":' +
+      JSON.stringify(thinkingLevel) +
+      ',"max_output_tokens":8192}'
+    : '{"max_output_tokens":8192}';
+  return (
+    '{"model":' +
+    JSON.stringify(model) +
+    ',"input":[{"type":"text","text":' +
+    JSON.stringify(prompt) +
+    '},{"type":"image","data":"' +
+    imageBase64 +
+    '","mime_type":' +
+    JSON.stringify(mimeType) +
+    '}],"generation_config":' +
+    generationConfig +
+    "}"
+  );
+}
+
+async function callGemini(body, headers, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers,
+      body,
+      signal: controller.signal,
+    });
+    const raw = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      /* respuesta no JSON */
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      raw,
+      data,
+      timedOut: false,
+    };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return { ok: false, status: 0, raw: "", data: null, timedOut: true };
+    }
+    return {
+      ok: false,
+      status: 0,
+      raw: String(error.message),
+      data: null,
+      networkError: true,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export default {
@@ -114,8 +190,7 @@ export default {
       });
     }
 
-    // Los datos llegan así: el cuerpo es el base64 de la imagen (text/plain) y el
-    // resto va en la URL. No se parsea JSON para gastar muy poca CPU.
+    // El cuerpo es el base64 de la imagen (text/plain); el resto va en la URL.
     const url = new URL(request.url);
     const mimeType = url.searchParams.get("mime") || "";
     const currency = url.searchParams.get("currency") || "";
@@ -141,23 +216,7 @@ export default {
     }
     const safeCurrency = /^[A-Z]{3}$/.test(currency) ? currency : "USD";
     const safeCountry = /^[A-Z]{2}$/.test(country) ? country : "XX";
-
-    const model = env.GEMINI_MODEL || "gemini-3.8-flash";
-    const thinkingLevel = env.GEMINI_THINKING_LEVEL || "low";
-
-    // Se arma el JSON como texto para no volver a procesar la imagen completa
-    const body =
-      '{"model":' +
-      JSON.stringify(model) +
-      ',"input":[{"type":"text","text":' +
-      JSON.stringify(buildPrompt(safeCurrency, safeCountry)) +
-      '},{"type":"image","data":"' +
-      imageBase64 +
-      '","mime_type":' +
-      JSON.stringify(mimeType) +
-      '}],"generation_config":{"thinking_level":' +
-      JSON.stringify(thinkingLevel) +
-      ',"max_output_tokens":8192}}';
+    const prompt = buildPrompt(safeCurrency, safeCountry);
 
     const headers = {
       "Content-Type": "application/json",
@@ -166,68 +225,111 @@ export default {
     if (env.GEMINI_API_REVISION)
       headers["Api-Revision"] = env.GEMINI_API_REVISION;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-    const startedAt = Date.now();
+    // Plan de intentos: modelo principal, reintento tras una pausa, y modelo de respaldo
+    const primaryModel = env.GEMINI_MODEL || "gemini-3.8-flash";
+    const fallbackModel =
+      env.GEMINI_FALLBACK_MODEL === undefined
+        ? "gemini-2.5-flash"
+        : env.GEMINI_FALLBACK_MODEL;
+    const thinkingLevel = env.GEMINI_THINKING_LEVEL || "low";
 
-    let response;
-    let raw;
-    try {
-      response = await fetch(API_URL, {
-        method: "POST",
-        headers,
-        body,
-        signal: controller.signal,
+    const attempts = [
+      { model: primaryModel, thinkingLevel },
+      { model: primaryModel, thinkingLevel, delayMs: RETRY_DELAY_MS },
+    ];
+    if (
+      fallbackModel &&
+      fallbackModel !== "none" &&
+      fallbackModel !== primaryModel
+    ) {
+      // El modelo de respaldo no recibe thinking_level: no todos lo admiten
+      attempts.push({
+        model: fallbackModel,
+        thinkingLevel: null,
+        delayMs: 500,
       });
-      raw = await response.text();
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.error(`Gemini no respondió en ${GEMINI_TIMEOUT_MS} ms`);
+    }
+
+    const startedAt = Date.now();
+    let success = null;
+    let firstFailure = null;
+
+    for (const attempt of attempts) {
+      if (attempt.delayMs) await sleep(attempt.delayMs);
+      const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining < 5000) break;
+
+      const attemptStart = Date.now();
+      const result = await callGemini(
+        buildRequestBody({
+          model: attempt.model,
+          thinkingLevel: attempt.thinkingLevel,
+          prompt,
+          mimeType,
+          imageBase64,
+        }),
+        headers,
+        Math.min(ATTEMPT_TIMEOUT_MS, remaining),
+      );
+      console.log(
+        `Intento con ${attempt.model}: ${result.timedOut ? "tiempo agotado" : result.status} en ${Date.now() - attemptStart} ms`,
+      );
+
+      if (result.ok) {
+        success = { ...result, model: attempt.model };
+        break;
+      }
+      if (!firstFailure) firstFailure = result;
+      if (result.raw) console.error("Detalle:", result.raw.slice(0, 400));
+
+      // Errores como 400, 401 o 403 no se arreglan reintentando
+      const retryable =
+        result.timedOut ||
+        result.networkError ||
+        RETRYABLE_STATUS.includes(result.status);
+      if (!retryable) break;
+    }
+
+    if (!success) {
+      const failure = firstFailure || { timedOut: true };
+      if (failure.timedOut) {
         return reply(504, {
           error: "El análisis tardó demasiado. Inténtalo de nuevo.",
         });
       }
-      console.error("No se pudo contactar con Gemini:", error.message);
-      return reply(502, {
-        error: "No se pudo contactar con el servicio de IA.",
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    console.log(
-      `Gemini respondió ${response.status} en ${Date.now() - startedAt} ms`,
-    );
-
-    let data = null;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      /* respuesta no JSON */
-    }
-
-    if (!response.ok) {
-      console.error("Error de Gemini:", response.status, raw.slice(0, 500));
-      if (response.status === 429) {
-        return reply(429, {
-          error:
-            "Hay demasiadas solicitudes. Espera un minuto e inténtalo de nuevo.",
+      if (failure.networkError) {
+        return reply(502, {
+          error: "No se pudo contactar con el servicio de IA.",
         });
       }
-      const detail = data?.error?.message || "petición fallida";
+      const detail = failure.data?.error?.message || "petición fallida";
       const reason =
-        data?.error?.details?.find((d) => d.reason)?.reason ||
-        data?.error?.status ||
+        failure.data?.error?.details?.find((d) => d.reason)?.reason ||
+        failure.data?.error?.status ||
         "";
       const code = reason
-        ? `${response.status} · ${reason}`
-        : `${response.status}`;
+        ? `${failure.status} · ${reason}`
+        : `${failure.status}`;
+
       if (
-        response.status === 401 ||
-        response.status === 403 ||
+        failure.status === 401 ||
+        failure.status === 403 ||
         reason === "API_KEY_INVALID"
       ) {
         return reply(502, {
           error: `Google rechazó la clave de Gemini (${code}). Revisa GEMINI_API_KEY en Cloudflare.`,
+        });
+      }
+      if (failure.status === 503) {
+        return reply(503, {
+          error:
+            "Gemini tiene mucha demanda en este momento. Inténtalo de nuevo en unos minutos.",
+        });
+      }
+      if (failure.status === 429) {
+        return reply(429, {
+          error:
+            "Hay demasiadas solicitudes. Espera un minuto e inténtalo de nuevo.",
         });
       }
       return reply(502, {
@@ -235,13 +337,16 @@ export default {
       });
     }
 
-    const text = extractText(data);
+    const text = extractText(success.data);
     if (!text) {
-      console.error("Respuesta sin texto:", raw.slice(0, 500));
+      console.error("Respuesta sin texto:", success.raw.slice(0, 500));
       return reply(502, {
         error: "La IA no devolvió ninguna respuesta de texto.",
       });
     }
+    console.log(
+      `Análisis correcto con ${success.model} en ${Date.now() - startedAt} ms`,
+    );
     return reply(200, { text });
   },
 };
