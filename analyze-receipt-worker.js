@@ -88,7 +88,20 @@ export default {
       return reply(405, { error: "Método no permitido." });
     }
     if (!originAllowed) {
-      return reply(403, { error: "Origen no permitido." });
+      // Este mensaje no contiene datos sensibles; se envía con CORS para que la app
+      // pueda mostrarlo y se vea exactamente qué dirección falta en ALLOWED_ORIGINS.
+      return new Response(
+        JSON.stringify({
+          error: `Origen no permitido (${origin || "desconocido"}). Añádelo a ALLOWED_ORIGINS en Cloudflare y vuelve a desplegar.`,
+        }),
+        {
+          status: 403,
+          headers: {
+            "Content-Type": "application/json",
+            ...(origin ? corsHeaders(origin) : {}),
+          },
+        },
+      );
     }
 
     // Quita espacios, saltos de línea y comillas que se cuelan al pegar la clave
