@@ -27,7 +27,7 @@ const auth = firebase.auth();
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
-  analyzeEndpoint: "https://compara-precios-ia.vitico222.workers.dev",
+  analyzeEndpoint: "https://compara-precios-ai.vitico222.workers.dev",
   analyzeTimeoutMs: 60000,
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
   jpegQuality: 0.8,
