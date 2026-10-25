@@ -231,7 +231,11 @@ export default {
       env.GEMINI_FALLBACK_MODEL === undefined
         ? "gemini-2.5-flash"
         : env.GEMINI_FALLBACK_MODEL;
-    const thinkingLevel = env.GEMINI_THINKING_LEVEL || "low";
+    // "none" desactiva thinking_level (modelos como gemini-2.5-flash no lo admiten)
+    const thinkingLevel =
+      env.GEMINI_THINKING_LEVEL === "none"
+        ? null
+        : env.GEMINI_THINKING_LEVEL || "low";
 
     const attempts = [
       { model: primaryModel, thinkingLevel },
