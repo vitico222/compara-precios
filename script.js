@@ -278,6 +278,17 @@ function switchView(viewId, { push = true } = {}) {
   if (!VALID_VIEWS.includes(viewId)) viewId = "home";
   if (viewId === "compare" && !AppState.currentReceiptData) viewId = "home";
 
+  // Si ya se vieron los resultados de la lista y se sale de esa vista, la próxima lista empieza vacía
+  const currentView = document.querySelector(".app-view.active-view");
+  if (
+    listOptimized &&
+    currentView &&
+    currentView.id === "view-list" &&
+    viewId !== "list"
+  ) {
+    resetShoppingList();
+  }
+
   document
     .querySelectorAll(".app-view")
     .forEach((view) => view.classList.remove("active-view"));
@@ -880,8 +891,26 @@ function closeAlertModal() {
 /* ========================================== */
 /* 11. LISTA DE COMPRAS INTELIGENTE           */
 /* ========================================== */
+// Se pone en true cuando ya se mostraron resultados de la lista actual
+let listOptimized = false;
+
 function saveShoppingList() {
   storageSet(STORAGE.shoppingList, JSON.stringify(AppState.shoppingList));
+}
+
+// Los resultados dejan de ser válidos si cambia la lista
+function clearOptimizationResults() {
+  const container = $("optimization-result-container");
+  if (container) container.innerHTML = "";
+  listOptimized = false;
+}
+
+// Vacía la lista y los resultados para empezar una lista nueva
+function resetShoppingList() {
+  AppState.shoppingList = [];
+  saveShoppingList();
+  clearOptimizationResults();
+  renderShoppingList();
 }
 
 function addShoppingItem() {
@@ -891,6 +920,7 @@ function addShoppingItem() {
   if (!itemName) return;
   AppState.shoppingList.push(itemName);
   input.value = "";
+  clearOptimizationResults();
   saveShoppingList();
   renderShoppingList();
   input.focus();
@@ -898,6 +928,7 @@ function addShoppingItem() {
 
 function removeShoppingItem(index) {
   AppState.shoppingList.splice(index, 1);
+  clearOptimizationResults();
   saveShoppingList();
   renderShoppingList();
 }
@@ -930,10 +961,9 @@ function renderShoppingList() {
     ul.appendChild(li);
   });
 
-  $("btn-optimize-list").classList.toggle(
-    "hidden",
-    AppState.shoppingList.length === 0,
-  );
+  const hasItems = AppState.shoppingList.length > 0;
+  $("btn-optimize-list").classList.toggle("hidden", !hasItems);
+  $("btn-clear-list").classList.toggle("hidden", !hasItems);
 }
 
 function cleanShoppingQuery(query) {
@@ -1065,6 +1095,7 @@ async function optimizeShoppingList() {
       html += `<p class="ticket-total optimized">Total estimado (${withPrice} de ${rows.length} productos): ${escapeHtml(formatMoney(estimatedTotal))}</p>`;
     }
     container.innerHTML = html;
+    listOptimized = true;
     container.scrollIntoView({ behavior: "smooth" });
   } finally {
     btn.disabled = false;
@@ -1200,6 +1231,10 @@ function initEventListeners() {
     if (btn) removeShoppingItem(Number(btn.dataset.removeIndex));
   });
   $("btn-optimize-list").addEventListener("click", optimizeShoppingList);
+  $("btn-clear-list").addEventListener("click", () => {
+    resetShoppingList();
+    $("shopping-item-input").focus();
+  });
 
   // Búsqueda
   $("product-search-input").addEventListener("input", scheduleSearch);
