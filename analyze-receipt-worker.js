@@ -10,7 +10,7 @@
 // Opcionales (Text):
 //   GEMINI_MODEL            modelo principal. Por defecto "gemini-3.8-flash"
 //   GEMINI_FALLBACK_MODEL   modelo de respaldo si el principal está saturado.
-//                           Por defecto "gemini-2.5-flash". Usa "none" para desactivarlo
+//                           Por defecto "gemini-3.5-flash-lite". Usa "none" para desactivarlo
 //   GEMINI_THINKING_LEVEL   por defecto "low" (también "minimal", "medium", "high")
 //   GEMINI_API_REVISION     si se define, se envía como cabecera Api-Revision
 
@@ -229,7 +229,7 @@ export default {
     const primaryModel = env.GEMINI_MODEL || "gemini-3.8-flash";
     const fallbackModel =
       env.GEMINI_FALLBACK_MODEL === undefined
-        ? "gemini-2.5-flash"
+        ? "gemini-3.5-flash-lite"
         : env.GEMINI_FALLBACK_MODEL;
     // "none" desactiva thinking_level (modelos como gemini-2.5-flash no lo admiten)
     const thinkingLevel =
@@ -237,22 +237,27 @@ export default {
         ? null
         : env.GEMINI_THINKING_LEVEL || "low";
 
-    const attempts = [
-      { model: primaryModel, thinkingLevel },
-      { model: primaryModel, thinkingLevel, delayMs: RETRY_DELAY_MS },
-    ];
-    if (
+    // Un 503 de saturación responde en 1-2 s, así que reintentar es barato.
+    // El modelo de respaldo no recibe thinking_level: no todos lo admiten.
+    const hasFallback =
       fallbackModel &&
       fallbackModel !== "none" &&
-      fallbackModel !== primaryModel
-    ) {
-      // El modelo de respaldo no recibe thinking_level: no todos lo admiten
-      attempts.push({
-        model: fallbackModel,
-        thinkingLevel: null,
-        delayMs: 500,
-      });
-    }
+      fallbackModel !== primaryModel;
+    const primary = (delayMs) => ({
+      model: primaryModel,
+      thinkingLevel,
+      delayMs,
+    });
+    const backup = (delayMs) => ({
+      model: fallbackModel,
+      thinkingLevel: null,
+      delayMs,
+    });
+
+    const attempts = [primary(0), primary(RETRY_DELAY_MS)];
+    if (hasFallback) attempts.push(backup(500));
+    attempts.push(primary(4000));
+    if (hasFallback) attempts.push(backup(2000));
 
     const startedAt = Date.now();
     let success = null;
@@ -291,7 +296,7 @@ export default {
         result.timedOut ||
         result.networkError ||
         RETRYABLE_STATUS.includes(result.status);
-      if (!retryable) break;
+      if (!retryable && attempt.model === primaryModel) break;
     }
 
     if (!success) {

@@ -27,7 +27,7 @@ const auth = firebase.auth();
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
-  analyzeEndpoint: "https://compara-precios-ai.vitico222.workers.dev",
+  analyzeEndpoint: "https://TU-WORKER.TU-SUBDOMINIO.workers.dev",
   analyzeTimeoutMs: 60000,
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
   jpegQuality: 0.8,
@@ -36,7 +36,8 @@ const SETTINGS = {
   maxItemsPerReceipt: 80,
   maxOffersPerQuery: 300,
   searchDebounceMs: 350,
-  compareDays: 30,
+  compareDays: 30, // comparación de un recibo recién escaneado
+  listDays: 90, // lista inteligente: hay pocos datos, se aceptan registros más antiguos
 };
 
 const STORAGE = {
@@ -953,10 +954,65 @@ function resultCardHtml(title, subtitle, statusHtml) {
     </div>`;
 }
 
-function bestOfferStatusHtml(best) {
-  if (!best)
-    return '<span class="price-empty">📍 Aún no hay sugerencias para este producto</span>';
-  return `📍 Cómpralo más barato en: <strong>${escapeHtml(best.offer.establishment)}</strong> (~${escapeHtml(formatMoney(best.offer.price))}) <small class="result-query">${SCOPE_LABELS[best.scope]} · ${best.count} registro(s)</small>`;
+// Nombres con los que puede estar guardado el producto: el texto escrito tal cual,
+// el texto sin artículos ("de", "la"...) y las coincidencias más cercanas del catálogo.
+function candidateKeysForQuery(query) {
+  const exact = normalizeName(query);
+  const cleaned = normalizeName(cleanShoppingQuery(query));
+  const fuzzy =
+    catalogFuse && (cleaned || exact)
+      ? catalogFuse
+          .search(cleaned || exact, { limit: 3 })
+          .filter((r) => r.score <= SETTINGS.listFuseThreshold)
+          .map((r) => r.item.name)
+      : [];
+  return [...new Set([exact, cleaned, ...fuzzy].filter(Boolean))];
+}
+
+// Busca el mejor precio entre todos los nombres candidatos (ciudad, luego estado, luego país)
+async function findBestOffer(keys, days = SETTINGS.listDays) {
+  const lists = await Promise.all(
+    keys.map(async (key) => ({
+      key,
+      offers: await fetchOffersForProduct(key),
+    })),
+  );
+  const totalOffers = lists.reduce((sum, item) => sum + item.offers.length, 0);
+
+  for (const scope of ["city", "state", "country"]) {
+    const pool = [];
+    lists.forEach(({ key, offers }) => {
+      filterOffers(offers, { scope, days }).forEach((offer) =>
+        pool.push({ ...offer, key }),
+      );
+    });
+    if (pool.length > 0) {
+      return {
+        best: { offer: pickBestOffer(pool), scope, count: pool.length },
+        totalOffers,
+        keys,
+      };
+    }
+  }
+  return { best: null, totalOffers, keys };
+}
+
+function noOfferStatusHtml(info) {
+  if (info && info.totalOffers > 0) {
+    return `<span class="price-empty">📍 Hay ${info.totalOffers} registro(s), pero tienen más de ${SETTINGS.listDays} días</span>`;
+  }
+  const searched = info && info.keys.length ? info.keys.join(" · ") : "";
+  return `<span class="price-empty">📍 Aún no hay registros de este producto${
+    searched
+      ? ` <small class="result-query">(buscado como: ${escapeHtml(searched)})</small>`
+      : ""
+  }</span>`;
+}
+
+function bestOfferStatusHtml(best, info) {
+  if (!best) return noOfferStatusHtml(info);
+  const when = best.offer.date ? ` · ${escapeHtml(best.offer.date)}` : "";
+  return `📍 Cómpralo más barato en: <strong>${escapeHtml(best.offer.establishment)}</strong> (~${escapeHtml(formatMoney(best.offer.price))}) <small class="result-query">${SCOPE_LABELS[best.scope]} · ${best.count} registro(s)${when}</small>`;
 }
 
 async function optimizeShoppingList() {
@@ -975,18 +1031,12 @@ async function optimizeShoppingList() {
   try {
     const rows = await Promise.all(
       AppState.shoppingList.map(async (query) => {
-        const match = matchProductWithCatalog(
-          cleanShoppingQuery(query),
-          SETTINGS.listFuseThreshold,
-        );
-        const key = match.matched
-          ? match.product.name
-          : match.cleanedName || normalizePlace(query);
-        const best = await getBestOfferWithFallback(key);
+        const info = await findBestOffer(candidateKeysForQuery(query));
         return {
           query,
-          title: match.matched ? match.product.name : query,
-          best,
+          title: info.best ? info.best.offer.key : query,
+          best: info.best,
+          info,
         };
       }),
     );
@@ -1008,7 +1058,7 @@ async function optimizeShoppingList() {
       html += resultCardHtml(
         row.title,
         `Buscado: "${row.query}"`,
-        bestOfferStatusHtml(row.best),
+        bestOfferStatusHtml(row.best, row.info),
       );
     });
     if (withPrice > 0) {
