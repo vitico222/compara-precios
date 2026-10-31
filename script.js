@@ -545,6 +545,26 @@ async function requestReceiptAnalysis(dataUrl) {
   return extractJsonObject(payload?.text);
 }
 
+// La IA a veces lee mal el año del ticket (ej. 2024 en vez de 2026). Como los recibos
+// se escanean poco después de la compra, si la fecha es muy antigua se prueba con el
+// año actual (o el anterior) antes de darla por buena.
+function resolveReceiptDate(rawDate) {
+  const today = todayIso();
+  const valid =
+    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && !Number.isNaN(Date.parse(rawDate));
+  if (!valid || rawDate > today) return today;
+
+  const oldestRecent = daysAgoIso(62);
+  if (rawDate >= oldestRecent) return rawDate;
+
+  const year = Number(today.slice(0, 4));
+  for (const candidateYear of [year, year - 1]) {
+    const candidate = `${candidateYear}${rawDate.slice(4)}`;
+    if (candidate <= today && candidate >= oldestRecent) return candidate;
+  }
+  return rawDate; // recibo realmente antiguo: se conserva su fecha
+}
+
 // Valida y normaliza lo que devuelve la IA antes de usarlo o guardarlo
 function normalizeReceiptData(raw) {
   const list = Array.isArray(raw?.items) ? raw.items : [];
@@ -577,18 +597,14 @@ function normalizeReceiptData(raw) {
   const itemsSum = round2(
     items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
   );
-  const rawDate = String(raw?.date ?? "");
-  const validDate =
-    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) &&
-    !Number.isNaN(Date.parse(rawDate)) &&
-    rawDate <= todayIso();
+  const receiptDate = resolveReceiptDate(String(raw?.date ?? ""));
 
   return {
     establishment:
       String(raw?.establishment ?? "")
         .trim()
         .slice(0, 80) || "Establecimiento general",
-    date: validDate ? rawDate : todayIso(),
+    date: receiptDate,
     items,
     itemsSum,
     total: toNumber(raw?.total) ?? itemsSum,
@@ -1024,12 +1040,26 @@ async function findBestOffer(keys, days = SETTINGS.listDays) {
       };
     }
   }
-  return { best: null, totalOffers, keys };
+
+  // Sin precios recientes: se ofrece el último registro conocido, avisando de su fecha
+  let stale = null;
+  if (totalOffers > 0) {
+    const all = [];
+    lists.forEach(({ key, offers }) =>
+      offers.forEach((offer) => all.push({ ...offer, key })),
+    );
+    stale = [...all].sort(
+      (a, b) =>
+        String(b.date).localeCompare(String(a.date)) || a.price - b.price,
+    )[0];
+  }
+  return { best: null, stale, totalOffers, keys };
 }
 
 function noOfferStatusHtml(info) {
-  if (info && info.totalOffers > 0) {
-    return `<span class="price-empty">📍 Hay ${info.totalOffers} registro(s), pero tienen más de ${SETTINGS.listDays} días</span>`;
+  if (info && info.stale) {
+    const s = info.stale;
+    return `<span class="price-empty">📍 Último registro conocido: <strong>${escapeHtml(s.establishment)}</strong> (~${escapeHtml(formatMoney(s.price))}) <small class="result-query">fecha ${escapeHtml(s.date || "desconocida")} · puede estar desactualizado</small></span>`;
   }
   const searched = info && info.keys.length ? info.keys.join(" · ") : "";
   return `<span class="price-empty">📍 Aún no hay registros de este producto${

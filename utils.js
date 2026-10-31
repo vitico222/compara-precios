@@ -68,7 +68,16 @@ function normalizeProductName(rawName) {
       formatMeasure(parseFloat(n) * 1000, "ml"),
     );
 
-  return text.replace(/\s+/g, " ").trim();
+  text = text.replace(/\s+/g, " ").trim();
+
+  // Los tickets terminan cada renglón con una letra de impuesto (E exento, G general,
+  // R reducida, A adicional): "zanahoria kg e", "atun 170g g". No es parte del nombre.
+  text = text.replace(/\s[egra]$/, "");
+
+  // Producto por peso sin cantidad ("zanahoria kg") = precio de 1 kg
+  text = text.replace(/(^|\s)kg$/, (_, space) => `${space}1kg`);
+
+  return text;
 }
 
 // Ejemplos de transformaciones esperadas:
@@ -79,3 +88,6 @@ function normalizeProductName(rawName) {
 // "Refresco Cola 1,5 L"         -> "refresco cola 1.5l"
 // "Aceite 0,5L"                 -> "aceite 500ml"
 // "Servilletas x 100"           -> "servilletas x100"
+// "ATUN EN TROZOS EVEBA 170G G" -> "atun en trozos eveba 170g"   (la última G es el impuesto)
+// "ZANAHORIA KG E"              -> "zanahoria 1kg"
+// "BOLSA PARA EMBALAR E"        -> "bolsa para embalar"

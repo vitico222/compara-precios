@@ -26,13 +26,14 @@ const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
 
 // El prompt vive en el servidor: así nadie puede usar tu clave para otras tareas
 function buildPrompt(currency, country) {
+  const today = new Date().toISOString().slice(0, 10);
   return `Analiza esta imagen de un recibo de supermercado (país: ${country}, moneda local: ${currency}).
 Devuelve SOLO un objeto JSON válido, sin Markdown ni explicaciones, con exactamente estas claves:
 - "establishment": nombre del comercio (string).
-- "date": fecha de la compra en formato YYYY-MM-DD (string), o null si no se lee.
+- "date": fecha de la compra en formato YYYY-MM-DD (string), o null si no se lee. La fecha de hoy es ${today}: el recibo suele ser de las últimas semanas, así que si el año está abreviado (por ejemplo "26") o no se lee con claridad, usa el año actual.
 - "items": array de productos. Cada uno con: "name" (string, como aparece en el recibo, incluyendo peso o volumen si aparece), "quantity" (número, 1 si no se indica), "unit_price" (precio de UNA unidad o de un kilo, número) y "line_total" (importe total de esa línea, número).
 - "total": total pagado (número).
-Reglas: usa punto como separador decimal y números sin símbolo de moneda ni separador de miles. Ignora líneas de IVA, impuestos, subtotales, descuentos globales, vuelto y métodos de pago. Si un dato no se puede leer usa null. No inventes productos.`;
+Reglas: usa punto como separador decimal y números sin símbolo de moneda ni separador de miles. Ignora líneas de IVA, impuestos, subtotales, descuentos globales, vuelto y métodos de pago. Si un dato no se puede leer usa null. No inventes productos. En "name" omite la letra de impuesto (E, G, R o A) que aparece al final de cada renglón.`;
 }
 
 // Tolera pequeñas variaciones en la forma de la respuesta de la API
