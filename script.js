@@ -27,7 +27,7 @@ const auth = firebase.auth();
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
-  analyzeEndpoint: "https://compara-precios-ai.vitico222.workers.dev",
+  analyzeEndpoint: "https://TU-WORKER.TU-SUBDOMINIO.workers.dev",
   analyzeTimeoutMs: 60000,
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
   jpegQuality: 0.8,
@@ -38,6 +38,8 @@ const SETTINGS = {
   searchDebounceMs: 350,
   compareDays: 30, // comparación de un recibo recién escaneado
   listDays: 90, // lista inteligente: hay pocos datos, se aceptan registros más antiguos
+  communityKeyScan: 150, // cuántos recibos recientes se leen para conocer los nombres de productos
+  communityFuseThreshold: 0.25, // más bajo = exige nombres más parecidos
 };
 
 const STORAGE = {
@@ -565,6 +567,16 @@ function resolveReceiptDate(rawDate) {
   return rawDate; // recibo realmente antiguo: se conserva su fecha
 }
 
+// Líneas del ticket que no son productos comparables (bolsas de caja, redondeo, donaciones...)
+function isNonProductLine(name) {
+  const clean = normalizeName(name);
+  return (
+    /^bolsas?( de (cliente|caja|supermercado|papel)| para embalar| plastica| reutilizable| ecologica)?$/.test(
+      clean,
+    ) || /^(redondeo|donacion|propina|servicio)\b/.test(clean)
+  );
+}
+
 // Valida y normaliza lo que devuelve la IA antes de usarlo o guardarlo
 function normalizeReceiptData(raw) {
   const list = Array.isArray(raw?.items) ? raw.items : [];
@@ -581,11 +593,25 @@ function normalizeReceiptData(raw) {
       );
       if (unitPrice === null && lineTotal !== null)
         unitPrice = lineTotal / quantity;
+      // Si la IA devolvió el importe de la línea como si fuera el precio unitario, se corrige
+      if (
+        unitPrice !== null &&
+        lineTotal !== null &&
+        lineTotal > 0 &&
+        quantity > 1
+      ) {
+        const consistent =
+          Math.abs(unitPrice * quantity - lineTotal) / lineTotal <= 0.02;
+        const unitIsLineTotal =
+          Math.abs(unitPrice - lineTotal) / lineTotal <= 0.02;
+        if (!consistent && unitIsLineTotal) unitPrice = lineTotal / quantity;
+      }
       return { name, quantity, unitPrice };
     })
     .filter(
       (item) => item.name && item.unitPrice !== null && item.unitPrice > 0,
     )
+    .filter((item) => !isNonProductLine(item.name))
     .slice(0, SETTINGS.maxItemsPerReceipt);
 
   if (items.length === 0) {
@@ -715,8 +741,94 @@ async function saveReceiptToCommunity(receipt) {
 // Caché en memoria: evita repetir lecturas (y costos) durante la sesión
 const offersCache = new Map();
 
+// Índice de los nombres de producto que ya existen en recibos de la comunidad. Sirve para
+// reconocer que "cer flips dulce de leche bo" (una tienda) y "cer flips dulce de leche
+// bolsa" (otra) son el mismo producto. Se carga una vez por sesión y se reutiliza.
+const communityKeyIndex = { promise: null, loadedAt: 0 };
+
 function clearOffersCache() {
   offersCache.clear();
+  communityKeyIndex.promise = null;
+}
+
+// Medidas y presentaciones del nombre (500g, 1kg, 1.5l, x6): dos productos con medidas
+// distintas no son comparables aunque los nombres se parezcan.
+function extractMeasures(text) {
+  const found =
+    String(text).match(/\b(?:\d+(?:\.\d+)?(?:kg|g|l|ml)|x\d+)\b/g) || [];
+  return [...new Set(found)].sort().join("|");
+}
+
+function measuresCompatible(a, b) {
+  const ma = extractMeasures(a);
+  const mb = extractMeasures(b);
+  return !ma || !mb || ma === mb;
+}
+
+function loadCommunityKeyIndex() {
+  const fresh =
+    communityKeyIndex.promise &&
+    Date.now() - communityKeyIndex.loadedAt < 300000;
+  if (fresh) return communityKeyIndex.promise;
+
+  communityKeyIndex.loadedAt = Date.now();
+  communityKeyIndex.promise = (async () => {
+    try {
+      await ensureAuth();
+      const snapshot = await db
+        .collection("community_receipts")
+        .orderBy("createdAt", "desc")
+        .limit(SETTINGS.communityKeyScan)
+        .get();
+      const keys = new Set();
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (
+          data.country !== AppState.country ||
+          data.currency !== AppState.currency
+        )
+          return;
+        (Array.isArray(data.itemKeys) ? data.itemKeys : []).forEach((key) =>
+          keys.add(key),
+        );
+      });
+      if (typeof Fuse === "undefined") return null;
+      return new Fuse(
+        [...keys].map((name) => ({ name })),
+        {
+          keys: ["name"],
+          threshold: SETTINGS.communityFuseThreshold,
+          includeScore: true,
+          ignoreLocation: true,
+        },
+      );
+    } catch (error) {
+      console.warn(
+        "No se pudo cargar el índice de productos de la comunidad:",
+        error,
+      );
+      communityKeyIndex.promise = null;
+      return null;
+    }
+  })();
+  return communityKeyIndex.promise;
+}
+
+// Nombres parecidos ya guardados por la comunidad (sin repetir el mismo y con medidas compatibles)
+async function similarCommunityKeys(text, limit = 3) {
+  const fuse = await loadCommunityKeyIndex();
+  const clean = normalizeName(text);
+  if (!fuse || !clean) return [];
+  return fuse
+    .search(clean, { limit: limit + 3 })
+    .filter(
+      (r) =>
+        r.score <= SETTINGS.communityFuseThreshold &&
+        r.item.name !== clean &&
+        measuresCompatible(clean, r.item.name),
+    )
+    .slice(0, limit)
+    .map((r) => r.item.name);
 }
 
 async function fetchOffersForProduct(standardName) {
@@ -828,9 +940,14 @@ async function renderParallelTickets(receipt) {
   rightContainer.innerHTML =
     '<p class="ticket-hint empty">Buscando los mejores precios...</p>';
   const results = await Promise.all(
-    receipt.processedItems.map((item) =>
-      getBestOfferWithFallback(item.standardName),
-    ),
+    receipt.processedItems.map(async (item) => {
+      const similar = await similarCommunityKeys(item.standardName);
+      const info = await findBestOffer(
+        [item.standardName, ...similar],
+        SETTINGS.compareDays,
+      );
+      return info.best;
+    }),
   );
 
   let rightHtml =
@@ -848,7 +965,11 @@ async function renderParallelTickets(receipt) {
       itemsWithData += 1;
       if (result.offer.price < item.unitPrice - 0.005) {
         unitFinal = result.offer.price;
-        hint = `<span class="ticket-hint">📍 Más barato en: <strong>${escapeHtml(result.offer.establishment)}</strong> (~${escapeHtml(formatMoney(result.offer.price))} c/u, ${SCOPE_LABELS[result.scope]})</span>`;
+        hint = `<span class="ticket-hint">📍 Más barato en: <strong>${escapeHtml(result.offer.establishment)}</strong> (~${escapeHtml(formatMoney(result.offer.price))} c/u, ${SCOPE_LABELS[result.scope]})</span>${
+          result.offer.key !== item.standardName
+            ? `<br><small class="ticket-hint empty">producto similar: ${escapeHtml(result.offer.key)}</small>`
+            : ""
+        }`;
       } else {
         hint =
           '<span class="ticket-hint">✓ Ya pagaste el mejor precio que conocemos</span>';
@@ -1002,7 +1123,7 @@ function resultCardHtml(title, subtitle, statusHtml) {
 
 // Nombres con los que puede estar guardado el producto: el texto escrito tal cual,
 // el texto sin artículos ("de", "la"...) y las coincidencias más cercanas del catálogo.
-function candidateKeysForQuery(query) {
+async function candidateKeysForQuery(query) {
   const exact = normalizeName(query);
   const cleaned = normalizeName(cleanShoppingQuery(query));
   const fuzzy =
@@ -1012,7 +1133,8 @@ function candidateKeysForQuery(query) {
           .filter((r) => r.score <= SETTINGS.listFuseThreshold)
           .map((r) => r.item.name)
       : [];
-  return [...new Set([exact, cleaned, ...fuzzy].filter(Boolean))];
+  const community = await similarCommunityKeys(cleaned || exact);
+  return [...new Set([exact, cleaned, ...fuzzy, ...community].filter(Boolean))];
 }
 
 // Busca el mejor precio entre todos los nombres candidatos (ciudad, luego estado, luego país)
@@ -1091,7 +1213,7 @@ async function optimizeShoppingList() {
   try {
     const rows = await Promise.all(
       AppState.shoppingList.map(async (query) => {
-        const info = await findBestOffer(candidateKeysForQuery(query));
+        const info = await findBestOffer(await candidateKeysForQuery(query));
         return {
           query,
           title: info.best ? info.best.offer.key : query,
@@ -1164,6 +1286,9 @@ async function runProductSearch() {
         .filter((r) => r.score <= SETTINGS.listFuseThreshold)
         .map((r) => r.item.name)
     : [];
+  // También productos que solo existen en recibos de la comunidad (fuera del catálogo)
+  const communityNames = await similarCommunityKeys(cleaned, 5);
+  names = [...new Set([...names, ...communityNames])].slice(0, 8);
   if (names.length === 0 && cleaned) names = [cleaned];
 
   const rows = await Promise.all(
