@@ -27,6 +27,7 @@ const auth = firebase.auth();
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
+  // Debe terminar en «-ai» (compara-precios-ai); «-ia» era el Worker antiguo, ya borrado.
   analyzeEndpoint: "https://compara-precios-ai.vitico222.workers.dev",
   analyzeTimeoutMs: 60000,
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
@@ -289,6 +290,12 @@ function switchView(viewId, { push = true } = {}) {
     viewId !== "list"
   ) {
     resetShoppingList();
+  }
+
+  // Al entrar a "Escanear" desde otra pantalla se empieza de cero, sin el recibo anterior
+  if (viewId === "scan" && (!currentView || currentView.id !== "view-scan")) {
+    clearImagePreview();
+    setScanStatus("");
   }
 
   document
@@ -688,6 +695,7 @@ async function processReceiptWithGemini() {
     await renderParallelTickets(receipt);
     switchView("compare");
     setScanStatus("");
+    clearImagePreview(); // la foto ya se analizó: se libera para el próximo recibo
 
     // 2) Compartir tu recibo con la comunidad
     const saved = await saveReceiptToCommunity(receipt);
