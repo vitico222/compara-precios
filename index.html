@@ -213,12 +213,32 @@
         </p>
 
         <div class="upload-zone card-3d">
-          <!-- Sin "capture": así el móvil ofrece cámara o galería -->
+          <!-- Dos entradas: con "capture" abre la cámara; sin él, la galería o los archivos.
+               Así funciona igual en todos los navegadores del móvil. -->
+          <input
+            type="file"
+            id="receipt-camera-input"
+            accept="image/*"
+            capture="environment"
+            hidden
+          />
           <input type="file" id="receipt-file-input" accept="image/*" hidden />
-          <label class="upload-trigger" for="receipt-file-input">
-            <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
-            <p>Pulsa aquí para tomar o cargar una foto</p>
-          </label>
+          <div class="upload-trigger">
+            <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+            <p>Sube una foto clara y completa de tu ticket</p>
+            <div class="upload-actions">
+              <label
+                class="btn-3d primary-btn upload-camera"
+                for="receipt-camera-input"
+              >
+                <i class="fa-solid fa-camera" aria-hidden="true"></i> Tomar foto
+              </label>
+              <label class="btn-3d secondary-btn" for="receipt-file-input">
+                <i class="fa-solid fa-image" aria-hidden="true"></i> Elegir de
+                la galería
+              </label>
+            </div>
+          </div>
           <div id="image-preview-container" class="hidden">
             <img id="receipt-preview" alt="Vista previa del recibo" />
             <button type="button" id="btn-remove-image" class="btn-secondary">
@@ -286,16 +306,16 @@
         <h2>Mi lista de compras inteligente</h2>
         <p class="section-subtitle">
           Agrega los productos que necesitas y te diremos dónde comprarlos más
-          barato.
+          barato. Puedes escribir varios a la vez, separados por coma.
         </p>
 
         <div class="shopping-input-group">
           <input
             type="text"
             id="shopping-item-input"
-            placeholder="Ej: 1 kg de azúcar, leche..."
-            aria-label="Producto a agregar a la lista"
-            maxlength="80"
+            placeholder="Ej: azúcar, leche, 1 kg de arroz"
+            aria-label="Productos a agregar a la lista, separados por coma"
+            maxlength="600"
           />
           <button
             type="button"

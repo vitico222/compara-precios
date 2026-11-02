@@ -364,11 +364,24 @@ img {
 /* Ahora es un <label>: debe ser bloque y clicable */
 .upload-trigger {
   display: block;
-  padding: 2rem 1rem;
-  cursor: pointer;
+  padding: 1.5rem 1rem 0.5rem;
 }
 
-.upload-trigger i {
+.upload-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1.25rem;
+}
+
+/* En un ordenador de escritorio no hay cámara a la que apuntar: solo se elige un archivo */
+@media (hover: hover) and (pointer: fine) {
+  .upload-camera {
+    display: none;
+  }
+}
+
+.upload-trigger > i {
   font-size: 3rem;
   color: var(--accent-teal);
   margin-bottom: 1rem;

@@ -437,6 +437,7 @@ function showImagePreview(dataUrl) {
 function clearImagePreview() {
   selectedImageDataUrl = null;
   $("receipt-file-input").value = "";
+  $("receipt-camera-input").value = "";
   $("receipt-preview").removeAttribute("src");
   $("image-preview-container").classList.add("hidden");
   document.querySelector(".upload-trigger").classList.remove("hidden");
@@ -461,6 +462,8 @@ async function handleImageUpload(event) {
       "No se pudo leer la imagen. Prueba con otra foto en formato JPG o PNG.",
       true,
     );
+  } finally {
+    event.target.value = ""; // así se puede volver a elegir el mismo archivo
   }
 }
 
@@ -1050,17 +1053,66 @@ function resetShoppingList() {
   renderShoppingList();
 }
 
+// Separa "azúcar, leche; 1,5 l de aceite" en productos sueltos. La coma entre dos
+// números ("1,5") es un decimal y no separa; el punto y coma y el salto de línea sí.
+function splitShoppingItems(text) {
+  const parts = [];
+  let current = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const decimalComma =
+      ch === "," &&
+      /\d/.test(text[i - 1] || "") &&
+      /\d/.test(text[i + 1] || "");
+    if (ch === ";" || ch === "\n" || (ch === "," && !decimalComma)) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
 function addShoppingItem() {
   const input = $("shopping-item-input");
   if (!input) return;
-  const itemName = input.value.trim().slice(0, 80);
-  if (!itemName) return;
-  AppState.shoppingList.push(itemName);
+
+  const MAX_ITEMS = 100;
+  const known = new Set(AppState.shoppingList.map(normalizePlace));
+  let added = 0;
+  let repeated = 0;
+
+  for (const raw of splitShoppingItems(input.value)) {
+    const itemName = raw.slice(0, 80);
+    const key = normalizePlace(itemName);
+    if (known.has(key)) {
+      repeated += 1;
+      continue;
+    }
+    if (AppState.shoppingList.length >= MAX_ITEMS) break;
+    AppState.shoppingList.push(itemName);
+    known.add(key);
+    added += 1;
+  }
+
+  if (added === 0 && repeated === 0) return;
+
   input.value = "";
   clearOptimizationResults();
   saveShoppingList();
   renderShoppingList();
   input.focus();
+
+  if (added > 1 || repeated > 0) {
+    const parts = [];
+    if (added > 1) parts.push(`Se agregaron ${added} productos`);
+    else if (added === 1) parts.push("Se agregó 1 producto");
+    if (repeated > 0)
+      parts.push(`${repeated} ya estaba${repeated > 1 ? "n" : ""} en la lista`);
+    showToast(parts.join(". "));
+  }
 }
 
 function removeShoppingItem(index) {
@@ -1368,10 +1420,10 @@ function initEventListeners() {
 
   // Recibo
   $("receipt-file-input").addEventListener("change", handleImageUpload);
+  $("receipt-camera-input").addEventListener("change", handleImageUpload);
   $("btn-remove-image").addEventListener("click", () => {
-    clearImagePreview();
+    clearImagePreview(); // vuelven a mostrarse los botones de cámara y galería
     setScanStatus("");
-    $("receipt-file-input").click();
   });
   $("btn-process-receipt").addEventListener("click", processReceiptWithGemini);
   $("btn-close-alert").addEventListener("click", closeAlertModal);
@@ -1380,6 +1432,19 @@ function initEventListeners() {
   $("btn-add-shopping-item").addEventListener("click", addShoppingItem);
   $("shopping-item-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") addShoppingItem();
+  });
+  // Un campo de una sola línea borra los saltos de línea al pegar: se convierten en comas
+  $("shopping-item-input").addEventListener("paste", (event) => {
+    const text = event.clipboardData && event.clipboardData.getData("text");
+    if (!text || !/[\r\n]/.test(text)) return;
+    event.preventDefault();
+    const input = event.target;
+    input.setRangeText(
+      text.replace(/\s*[\r\n]+\s*/g, ", "),
+      input.selectionStart,
+      input.selectionEnd,
+      "end",
+    );
   });
   $("shopping-list-items").addEventListener("click", (event) => {
     const btn = event.target.closest("[data-remove-index]");
