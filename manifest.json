@@ -14,19 +14,19 @@
   "categories": ["shopping", "finance"],
   "icons": [
     {
-      "src": "assets/icon-192.png",
+      "src": "assets/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "assets/icon-512.png",
+      "src": "assets/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "assets/icon-maskable-512.png",
+      "src": "assets/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -45,18 +45,3 @@
     }
   ]
 }
-
-// Lo que tienes que crear:  El manifest anterior declaraba el mismo archivo .jpg como si fuera de 192 y de 512 píxeles. Eso es un problema doble: en tu app el logo es .png, y un solo archivo no puede ser de dos tamaños a la vez. Para que el navegador ofrezca instalar la app con el icono correcto, necesitas tres PNG en la carpeta assets/:
-
-Archivo	Tamaño	Uso
-icon-192.png	192×192	Icono normal
-icon-512.png	512×512	Icono normal, pantalla de carga
-icon-maskable-512.png	512×512	Android, que lo recorta en círculo o cuadrado
-
-Puedes crearlos a partir de tu logo con una herramienta gratuita como realfavicongenerator.net, o con cualquier editor. Para el icono maskable, el dibujo debe quedar dentro del 80 % central de la imagen, y maskable.app te deja comprobar visualmente cómo se recorta. Si tu logo ya es un círculo, el maskable necesita un margen de color alrededor.
-
-Si hoy no puedes hacerlo, usa temporalmente tu logo_compara_precios.png en las tres entradas. Pero entonces el valor de sizes tiene que ser el tamaño real del archivo (clic derecho, Propiedades, Detalles). //
-
-Un detalle de index.html
-
-El apple-touch-icon de index.html apunta a logo_compara_precios.png. Cuando tengas los iconos nuevos, cámbialo a assets/icon-192.png, porque iOS se ve mejor con un PNG cuadrado.

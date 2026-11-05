@@ -4,7 +4,7 @@
 
 // Sube el número SOLO si cambias la lista de archivos a precargar.
 // El código (HTML, JS, CSS) se actualiza solo: se pide primero a la red.
-const CACHE_NAME = "compara-precios-v2";
+const CACHE_NAME = "compara-precios-v3";
 const CACHE_PREFIX = "compara-precios-";
 const NETWORK_TIMEOUT_MS = 4000;
 
@@ -18,8 +18,10 @@ const APP_SHELL = [
   "./script.js",
   "./manifest.json",
   "./assets/logo_compara_precios.png",
-  "./assets/icon-192.png",
-  "./assets/icon-512.png",
+  "./assets/favicon_compara_precios.svg",
+  "./assets/icons/icon-192.png",
+  "./assets/icons/icon-512.png",
+  "./assets/icons/apple-touch-icon.png",
 ];
 
 // Librerías externas, con la misma URL exacta que usa index.html
