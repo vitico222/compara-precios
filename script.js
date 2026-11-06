@@ -601,20 +601,15 @@ function normalizeReceiptData(raw) {
       let unitPrice = toNumber(
         item?.unit_price ?? item?.unitPrice ?? item?.price,
       );
-      if (unitPrice === null && lineTotal !== null)
-        unitPrice = lineTotal / quantity;
-      // Si la IA devolvió el importe de la línea como si fuera el precio unitario, se corrige
-      if (
-        unitPrice !== null &&
-        lineTotal !== null &&
-        lineTotal > 0 &&
-        quantity > 1
-      ) {
-        const consistent =
-          Math.abs(unitPrice * quantity - lineTotal) / lineTotal <= 0.02;
-        const unitIsLineTotal =
-          Math.abs(unitPrice - lineTotal) / lineTotal <= 0.02;
-        if (!consistent && unitIsLineTotal) unitPrice = lineTotal / quantity;
+      // El importe de la derecha del ticket es el dato que la IA lee con más fiabilidad.
+      // Si el precio unitario no cuadra con él (por ejemplo, devolvió el total de la línea
+      // como si fuera el de una sola unidad), se calcula: importe de la línea ÷ cantidad.
+      if (lineTotal !== null && lineTotal > 0) {
+        const fromTotal = lineTotal / quantity;
+        const agrees =
+          unitPrice !== null &&
+          Math.abs(unitPrice - fromTotal) / fromTotal <= 0.02;
+        if (!agrees) unitPrice = fromTotal;
       }
       return { name, quantity, unitPrice };
     })
@@ -633,6 +628,12 @@ function normalizeReceiptData(raw) {
   const itemsSum = round2(
     items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
   );
+  // El SUBTOTAL impreso permite detectar productos o precios mal leídos
+  const subtotal = toNumber(raw?.subtotal);
+  const subtotalMismatch =
+    subtotal !== null &&
+    subtotal > 0 &&
+    Math.abs(itemsSum - subtotal) / subtotal > 0.02;
   const receiptDate = resolveReceiptDate(String(raw?.date ?? ""));
 
   return {
@@ -643,6 +644,8 @@ function normalizeReceiptData(raw) {
     date: receiptDate,
     items,
     itemsSum,
+    subtotal,
+    subtotalMismatch,
     total: toNumber(raw?.total) ?? itemsSum,
   };
 }
@@ -664,6 +667,14 @@ function processReceiptItems(items) {
   });
 }
 
+// Animación translúcida sobre la foto mientras la IA lee el ticket
+function setAnalyzing(on) {
+  const overlay = $("scan-overlay");
+  if (overlay) overlay.classList.toggle("hidden", !on);
+  const changePhoto = $("btn-remove-image");
+  if (changePhoto) changePhoto.disabled = on;
+}
+
 async function processReceiptWithGemini() {
   if (!selectedImageDataUrl) return;
   if (!hasRegionConfig()) {
@@ -683,7 +694,8 @@ async function processReceiptWithGemini() {
   btn.innerHTML =
     '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Analizando ticket con IA...';
   btn.disabled = true;
-  setScanStatus("Analizando el ticket, esto puede tardar unos segundos...");
+  setScanStatus("");
+  setAnalyzing(true);
 
   try {
     const raw = await requestReceiptAnalysis(selectedImageDataUrl);
@@ -704,6 +716,7 @@ async function processReceiptWithGemini() {
     console.error("Error al procesar el recibo:", error);
     setScanStatus(error.message || "No se pudo procesar el recibo.", true);
   } finally {
+    setAnalyzing(false);
     btn.innerHTML = originalLabel;
     btn.disabled = !selectedImageDataUrl;
   }
@@ -721,6 +734,7 @@ async function saveReceiptToCommunity(receipt) {
       standardName: item.standardName,
       originalName: item.originalName,
       price: round2(item.unitPrice), // precio por unidad (o por kg)
+      priceBasis: "unit", // marca que el precio NO es el total de la línea
       quantity: item.quantity,
       productId: item.productId,
     }));
@@ -866,6 +880,9 @@ async function fetchOffersForProduct(standardName) {
         if (!Array.isArray(data.items)) return;
         data.items.forEach((item) => {
           if (item.standardName !== standardName) return;
+          // Recibos guardados antes de marcar la base del precio: con cantidad > 1 no se sabe si
+          // el precio era unitario o el total de la línea, así que no se usan.
+          if (item.priceBasis !== "unit" && Number(item.quantity) > 1) return;
           const price = toNumber(item.price);
           if (price === null || price <= 0) return;
           offers.push({
@@ -945,6 +962,9 @@ async function renderParallelTickets(receipt) {
     leftHtml += `<div class="ticket-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(formatMoney(item.unitPrice * item.quantity))}</span></div>`;
   });
   leftHtml += `<hr class="ticket-divider"><p class="ticket-total">TOTAL: ${escapeHtml(formatMoney(receipt.total))}</p>`;
+  if (receipt.subtotalMismatch) {
+    leftHtml += `<p class="ticket-warning">⚠ La suma de los productos (${escapeHtml(formatMoney(receipt.itemsSum))}) no coincide con el subtotal del ticket (${escapeHtml(formatMoney(receipt.subtotal))}). Puede haber un producto o un precio mal leído.</p>`;
+  }
   leftContainer.innerHTML = leftHtml;
 
   // Comparación con la comunidad (todas las consultas en paralelo)
@@ -976,7 +996,7 @@ async function renderParallelTickets(receipt) {
       itemsWithData += 1;
       if (result.offer.price < item.unitPrice - 0.005) {
         unitFinal = result.offer.price;
-        hint = `<span class="ticket-hint">📍 Más barato en: <strong>${escapeHtml(result.offer.establishment)}</strong> (~${escapeHtml(formatMoney(result.offer.price))} c/u, ${SCOPE_LABELS[result.scope]})</span>${
+        hint = `<span class="ticket-hint saving">📍 Más barato en: <strong>${escapeHtml(result.offer.establishment)}</strong> (~${escapeHtml(formatMoney(result.offer.price))} c/u, ${SCOPE_LABELS[result.scope]})</span>${
           result.offer.key !== item.standardName
             ? `<br><small class="ticket-hint empty">producto similar: ${escapeHtml(result.offer.key)}</small>`
             : ""
@@ -1254,7 +1274,7 @@ function noOfferStatusHtml(info) {
 function bestOfferStatusHtml(best, info) {
   if (!best) return noOfferStatusHtml(info);
   const when = best.offer.date ? ` · ${escapeHtml(best.offer.date)}` : "";
-  return `📍 Cómpralo más barato en: <strong>${escapeHtml(best.offer.establishment)}</strong> (~${escapeHtml(formatMoney(best.offer.price))}) <small class="result-query">${SCOPE_LABELS[best.scope]} · ${best.count} registro(s)${when}</small>`;
+  return `📍 Cómpralo más barato en: <strong>${escapeHtml(best.offer.establishment)}</strong> (~${escapeHtml(formatMoney(best.offer.price))} c/u) <small class="result-query">${SCOPE_LABELS[best.scope]} · ${best.count} registro(s)${when}</small>`;
 }
 
 async function optimizeShoppingList() {
@@ -1376,7 +1396,7 @@ async function runProductSearch() {
     html += resultCardHtml(
       name,
       `${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
-      `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> en ${escapeHtml(best.establishment)}`,
+      `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> c/u en ${escapeHtml(best.establishment)}`,
     );
   });
   container.innerHTML =

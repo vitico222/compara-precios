@@ -12,8 +12,12 @@
     <!-- PWA -->
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#0d3b66" />
-    <link rel="icon" href="assets/logo_compara_precios.png" />
-    <link rel="apple-touch-icon" href="assets/logo_compara_precios.png" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="assets/favicon_compara_precios.svg"
+    />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
 
     <!-- Estilos -->
     <link rel="stylesheet" href="styles.css" />
@@ -240,7 +244,25 @@
             </div>
           </div>
           <div id="image-preview-container" class="hidden">
-            <img id="receipt-preview" alt="Vista previa del recibo" />
+            <div class="scan-frame">
+              <img id="receipt-preview" alt="Vista previa del recibo" />
+              <!-- Animación que se muestra mientras la IA analiza el ticket -->
+              <div
+                id="scan-overlay"
+                class="scan-overlay hidden"
+                aria-hidden="true"
+              >
+                <div class="scan-beam"></div>
+                <div class="scan-label">
+                  <span class="scan-dot"></span>
+                  <span
+                    >Analizando recibo<span class="scan-dots"
+                      ><i>.</i><i>.</i><i>.</i></span
+                    ></span
+                  >
+                </div>
+              </div>
+            </div>
             <button type="button" id="btn-remove-image" class="btn-secondary">
               Cambiar foto
             </button>

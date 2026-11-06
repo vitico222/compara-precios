@@ -810,3 +810,160 @@ img {
     transition: none !important;
   }
 }
+
+/* ========================================== */
+/* 12. ANIMACIÓN "ANALIZANDO RECIBO" Y AVISOS */
+/* ========================================== */
+:root {
+  --saving-green: #14803f; /* verde de "Más barato en": distinto del azul aguamarina */
+}
+
+.ticket-hint.saving {
+  color: var(--saving-green);
+  font-weight: 700;
+}
+
+.ticket-warning {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  background: #fff4e0;
+  color: #8a5a00;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+/* La foto queda dentro de un marco para poder superponerle la animación */
+.scan-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: 1rem;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  line-height: 0;
+}
+
+#image-preview-container .scan-frame img {
+  display: block;
+  margin-bottom: 0;
+}
+
+/* Capa translúcida: el recibo se sigue viendo por debajo */
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 168, 204, 0.16),
+    rgba(13, 59, 102, 0.3)
+  );
+}
+
+/* Esquinas de visor, como un escáner */
+.scan-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+  background:
+    linear-gradient(#fff, #fff) top left / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) top left / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) top right / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) top right / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) bottom left / 3px 22px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 22px 3px no-repeat,
+    linear-gradient(#fff, #fff) bottom right / 3px 22px no-repeat;
+  filter: drop-shadow(0 0 4px rgba(0, 194, 203, 0.9));
+}
+
+/* Haz de luz que recorre el ticket de arriba abajo y vuelve */
+.scan-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 26%;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 194, 203, 0) 0%,
+    rgba(0, 194, 203, 0.35) 48%,
+    rgba(214, 255, 252, 0.95) 50%,
+    rgba(0, 194, 203, 0.35) 52%,
+    rgba(0, 194, 203, 0) 100%
+  );
+  animation: scanSweep 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes scanSweep {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(385%);
+  }
+}
+
+.scan-label {
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  background: rgba(13, 59, 102, 0.58);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.scan-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #7ff7ee;
+  animation: scanPulse 1.4s ease-out infinite;
+}
+
+@keyframes scanPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(127, 247, 238, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 0.7rem rgba(127, 247, 238, 0);
+  }
+}
+
+.scan-dots i {
+  font-style: normal;
+  animation: scanBlink 1.2s infinite both;
+}
+
+.scan-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.scan-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes scanBlink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
