@@ -967,3 +967,73 @@ img {
     opacity: 1;
   }
 }
+
+/* ========================================== */
+/* 13. SUGERENCIAS DE LA LISTA Y NOTAS        */
+/* ========================================== */
+.suggestions {
+  margin: -0.25rem 0 1rem;
+}
+
+.suggestions-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.suggestions-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.suggestions-group {
+  margin: 0.7rem 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary-blue);
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(0, 168, 204, 0.45);
+  border-radius: 2rem;
+  background: #ffffff;
+  color: var(--primary-blue);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--transition-speed);
+}
+
+.chip:hover {
+  background: rgba(0, 168, 204, 0.1);
+}
+
+.chip-basic {
+  border-color: rgba(20, 128, 63, 0.5);
+}
+
+.chip-toggle {
+  padding: 0.2rem 0.4rem;
+  border: none;
+  background: none;
+  color: var(--accent-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.result-note {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

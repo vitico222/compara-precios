@@ -10,6 +10,7 @@ const RECEIPT_ABBREVIATIONS = {
   deterg: "detergente",
   mant: "mantequilla",
   marg: "margarina",
+  mante: "mantequilla",
 };
 
 // Palabras que aparecen en los tickets pero no describen el producto

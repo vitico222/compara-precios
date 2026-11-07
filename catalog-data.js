@@ -420,13 +420,14 @@ const initialCatalogData = [
     id: "prod_058",
     name: "mantequilla con sal 500g",
     category: "Lácteos",
-    keywords: ["mantequilla", "con sal"],
+    keywords: ["mantequilla", "mante", "con sal"],
   },
   {
     id: "prod_059",
     name: "margarina sin sal 500g",
     category: "Lácteos",
     keywords: ["margarina", "sin sal", "mavesa"],
+    aliases: ["mantequilla", "mante"],
   },
   {
     id: "prod_060",
@@ -1167,6 +1168,22 @@ const initialCatalogData = [
     name: "alcohol antiseptico 500ml",
     category: "Cuidado Personal",
     keywords: ["alcohol", "isopropilico", "etilico", "antiseptico"],
+  },
+
+  // ==========================================
+  // 8. ADICIONES PARA LA CANASTA BÁSICA
+  // ==========================================
+  {
+    id: "prod_234",
+    name: "higado de res 1kg",
+    category: "Carnes",
+    keywords: ["higado", "visceras", "res"],
+  },
+  {
+    id: "prod_235",
+    name: "papelon 1kg",
+    category: "Víveres",
+    keywords: ["papelon", "panela", "raspadura"],
   },
 ];
 

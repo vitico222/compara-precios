@@ -1103,16 +1103,14 @@ function splitShoppingItems(text) {
   return parts.map((part) => part.trim()).filter(Boolean);
 }
 
-function addShoppingItem() {
-  const input = $("shopping-item-input");
-  if (!input) return;
-
+// Agrega productos a la lista sin repetir. Devuelve cuántos se agregaron y cuántos ya estaban.
+function addItemsToShoppingList(names) {
   const MAX_ITEMS = 100;
   const known = new Set(AppState.shoppingList.map(normalizePlace));
   let added = 0;
   let repeated = 0;
 
-  for (const raw of splitShoppingItems(input.value)) {
+  for (const raw of names) {
     const itemName = raw.slice(0, 80);
     const key = normalizePlace(itemName);
     if (known.has(key)) {
@@ -1125,12 +1123,25 @@ function addShoppingItem() {
     added += 1;
   }
 
+  if (added > 0) {
+    clearOptimizationResults();
+    saveShoppingList();
+    renderShoppingList();
+  }
+  return { added, repeated };
+}
+
+function addShoppingItem() {
+  const input = $("shopping-item-input");
+  if (!input) return;
+
+  const { added, repeated } = addItemsToShoppingList(
+    splitShoppingItems(input.value),
+  );
   if (added === 0 && repeated === 0) return;
 
   input.value = "";
-  clearOptimizationResults();
-  saveShoppingList();
-  renderShoppingList();
+  renderShoppingSuggestions();
   input.focus();
 
   if (added > 1 || repeated > 0) {
@@ -1181,6 +1192,72 @@ function renderShoppingList() {
   const hasItems = AppState.shoppingList.length > 0;
   $("btn-optimize-list").classList.toggle("hidden", !hasItems);
   $("btn-clear-list").classList.toggle("hidden", !hasItems);
+  renderShoppingSuggestions();
+}
+
+/* ---------- Sugerencias: canasta básica y coincidencias mientras se escribe ---------- */
+let suggestionsExpanded = false;
+
+// La parte que se está escribiendo es la última, después de la última coma
+function currentShoppingSegment() {
+  const input = $("shopping-item-input");
+  const parts = (input ? input.value : "").split(/[,;\n]/);
+  return (parts[parts.length - 1] || "").trim();
+}
+
+function chipHtml(value, basic) {
+  const label = `${basic ? "★ " : ""}${value}`;
+  return `<button type="button" class="chip${basic ? " chip-basic" : ""}" data-add="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+}
+
+function renderShoppingSuggestions() {
+  const box = $("shopping-suggestions");
+  if (!box || typeof suggestProducts !== "function") return;
+
+  const inList = new Set(AppState.shoppingList.map(normalizePlace));
+  const segment = currentShoppingSegment();
+  let html = "";
+
+  if (segment.length >= 2) {
+    const items = suggestProducts(segment, { limit: 6, exclude: inList });
+    if (items.length > 0) {
+      html = `<div class="suggestions-head"><span class="suggestions-title">Sugerencias</span></div>
+        <div class="chip-list">${items.map((item) => chipHtml(item.value, item.basic)).join("")}</div>`;
+    }
+  } else {
+    const items = canastaSuggestions({
+      expanded: suggestionsExpanded,
+      exclude: inList,
+    });
+    const toggle = `<button type="button" class="chip-toggle" data-toggle-canasta>${
+      suggestionsExpanded ? "Ver menos" : "Ver los 60"
+    }</button>`;
+    html = `<div class="suggestions-head"><span class="suggestions-title">Canasta básica</span>${toggle}</div>`;
+    if (!suggestionsExpanded) {
+      html += `<div class="chip-list">${items.map((item) => chipHtml(item.value, false)).join("")}</div>`;
+    } else {
+      const groups = [...new Set(items.map((item) => item.group))];
+      groups.forEach((group) => {
+        html += `<div class="suggestions-group">${escapeHtml(group)}</div><div class="chip-list">${items
+          .filter((item) => item.group === group)
+          .map((item) => chipHtml(item.value, false))
+          .join("")}</div>`;
+      });
+    }
+    if (items.length === 0) html = "";
+  }
+  box.innerHTML = html;
+}
+
+// Quita de la caja de texto la parte que se estaba escribiendo (ya se agregó como producto)
+function removeCurrentShoppingSegment() {
+  const input = $("shopping-item-input");
+  if (!input) return;
+  const cut = Math.max(
+    input.value.lastIndexOf(","),
+    input.value.lastIndexOf(";"),
+  );
+  input.value = cut === -1 ? "" : input.value.slice(0, cut + 1).trimEnd() + " ";
 }
 
 function cleanShoppingQuery(query) {
@@ -1190,7 +1267,7 @@ function cleanShoppingQuery(query) {
     .trim();
 }
 
-function resultCardHtml(title, subtitle, statusHtml) {
+function resultCardHtml(title, subtitle, statusHtml, note = "") {
   return `
     <div class="product-result-card">
       <div class="result-head">
@@ -1198,23 +1275,46 @@ function resultCardHtml(title, subtitle, statusHtml) {
         ${subtitle ? `<small class="result-query">${escapeHtml(subtitle)}</small>` : ""}
       </div>
       <div class="price-status">${statusHtml}</div>
+      ${note ? `<div class="result-note">${escapeHtml(note)}</div>` : ""}
     </div>`;
 }
 
 // Nombres con los que puede estar guardado el producto: el texto escrito tal cual,
 // el texto sin artículos ("de", "la"...) y las coincidencias más cercanas del catálogo.
-async function candidateKeysForQuery(query) {
+// Interpreta lo que escribió la persona. Si es algo general ("pasta", "leche", "salsa") se
+// queda con el producto más popular (espagueti, leche en polvo, salsa de tomate); si es algo
+// específico ("pasta de tomate") gana lo específico. Devuelve grupos de nombres para buscar
+// precios por orden de prioridad: en cuanto un grupo tiene precios, se usa ese.
+async function resolveShoppingQuery(query) {
   const exact = normalizeName(query);
   const cleaned = normalizeName(cleanShoppingQuery(query));
-  const fuzzy =
-    catalogFuse && (cleaned || exact)
-      ? catalogFuse
-          .search(cleaned || exact, { limit: 3 })
-          .filter((r) => r.score <= SETTINGS.listFuseThreshold)
-          .map((r) => r.item.name)
-      : [];
-  const community = await similarCommunityKeys(cleaned || exact);
-  return [...new Set([exact, cleaned, ...fuzzy, ...community].filter(Boolean))];
+  const ranked =
+    typeof rankProducts === "function" ? rankProducts(query, { limit: 4 }) : [];
+  const top = ranked[0] ? ranked[0].product.name : null;
+  const similarToTop = top ? await similarCommunityKeys(top) : [];
+
+  const tiers = [
+    [exact, top, ...similarToTop], // lo escrito tal cual y el producto más popular que coincide
+    ranked.slice(1).map((r) => r.product.name), // otros productos parecidos, por popularidad
+    await similarCommunityKeys(cleaned || exact), // productos de recibos que no están en el catálogo
+  ].map((tier) => [...new Set(tier.filter(Boolean))]);
+
+  return { tiers, interpreted: top };
+}
+
+async function findBestOfferTiered(tiers, days = SETTINGS.listDays) {
+  const allKeys = [...new Set(tiers.flat())];
+  const tried = [];
+  for (let i = 0; i < tiers.length; i++) {
+    if (tiers[i].length === 0) continue;
+    const info = await findBestOffer(tiers[i], days);
+    info.tier = i;
+    if (info.best) return { ...info, keys: allKeys };
+    tried.push(info);
+  }
+  const base = tried.find((info) => info.stale) ||
+    tried[0] || { best: null, stale: null, totalOffers: 0, tier: 0 };
+  return { ...base, keys: allKeys };
 }
 
 // Busca el mejor precio entre todos los nombres candidatos (ciudad, luego estado, luego país)
@@ -1293,10 +1393,12 @@ async function optimizeShoppingList() {
   try {
     const rows = await Promise.all(
       AppState.shoppingList.map(async (query) => {
-        const info = await findBestOffer(await candidateKeysForQuery(query));
+        const plan = await resolveShoppingQuery(query);
+        const info = await findBestOfferTiered(plan.tiers);
         return {
           query,
-          title: info.best ? info.best.offer.key : query,
+          plan,
+          title: info.best ? info.best.offer.key : plan.interpreted || query,
           best: info.best,
           info,
         };
@@ -1317,10 +1419,18 @@ async function optimizeShoppingList() {
         </button>
       </div>`;
     rows.forEach((row) => {
+      const usedFallback =
+        row.best &&
+        row.plan.interpreted &&
+        row.info.tier > 0 &&
+        row.best.offer.key !== row.plan.interpreted;
       html += resultCardHtml(
         row.title,
         `Buscado: "${row.query}"`,
         bestOfferStatusHtml(row.best, row.info),
+        usedFallback
+          ? `Aún no hay registros de ${prettyProductName(row.plan.interpreted)}: se muestra el producto más cercano.`
+          : "",
       );
     });
     if (withPrice > 0) {
@@ -1360,12 +1470,13 @@ async function runProductSearch() {
   const days = Number($("filter-time").value) || SETTINGS.compareDays;
   const cleaned = normalizeName(query);
 
-  let names = catalogFuse
-    ? catalogFuse
-        .search(cleaned, { limit: 5 })
-        .filter((r) => r.score <= SETTINGS.listFuseThreshold)
-        .map((r) => r.item.name)
-    : [];
+  // Primero lo más específico y, a igualdad, lo más popular (la canasta básica va primero)
+  const ranked =
+    typeof rankProducts === "function" ? rankProducts(query, { limit: 8 }) : [];
+  const basicNames = new Set(
+    ranked.filter((r) => r.product.basic).map((r) => r.product.name),
+  );
+  let names = ranked.map((r) => r.product.name);
   // También productos que solo existen en recibos de la comunidad (fuera del catálogo)
   const communityNames = await similarCommunityKeys(cleaned, 5);
   names = [...new Set([...names, ...communityNames])].slice(0, 8);
@@ -1387,7 +1498,7 @@ async function runProductSearch() {
     if (offers.length === 0) {
       html += resultCardHtml(
         name,
-        "",
+        basicNames.has(name) ? "★ Canasta básica" : "",
         '<span class="price-empty">📍 Sin registros con estos filtros</span>',
       );
       return;
@@ -1395,7 +1506,7 @@ async function runProductSearch() {
     const best = pickBestOffer(offers);
     html += resultCardHtml(
       name,
-      `${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
+      `${basicNames.has(name) ? "★ Canasta básica · " : ""}${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
       `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> c/u en ${escapeHtml(best.establishment)}`,
     );
   });
@@ -1461,6 +1572,25 @@ function initEventListeners() {
   $("shopping-item-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") addShoppingItem();
   });
+  $("shopping-item-input").addEventListener("input", renderShoppingSuggestions);
+  const suggestionsBox = $("shopping-suggestions");
+  if (suggestionsBox) {
+    suggestionsBox.addEventListener("click", (event) => {
+      const addButton = event.target.closest("[data-add]");
+      if (addButton) {
+        const typing = currentShoppingSegment().length >= 2;
+        const { repeated } = addItemsToShoppingList([addButton.dataset.add]);
+        if (typing) removeCurrentShoppingSegment();
+        if (repeated > 0) showToast("Ese producto ya estaba en la lista");
+        renderShoppingSuggestions();
+        return;
+      }
+      if (event.target.closest("[data-toggle-canasta]")) {
+        suggestionsExpanded = !suggestionsExpanded;
+        renderShoppingSuggestions();
+      }
+    });
+  }
   // Un campo de una sola línea borra los saltos de línea al pegar: se convierten en comas
   $("shopping-item-input").addEventListener("paste", (event) => {
     const text = event.clipboardData && event.clipboardData.getData("text");

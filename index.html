@@ -349,6 +349,13 @@
           </button>
         </div>
 
+        <!-- Sugerencias: canasta básica y coincidencias mientras se escribe -->
+        <div
+          id="shopping-suggestions"
+          class="suggestions"
+          aria-live="polite"
+        ></div>
+
         <ul id="shopping-list-items" class="shopping-list-ul"></ul>
 
         <button
@@ -465,6 +472,7 @@
          la clave de Gemini vive en Netlify, no en el navegador. -->
     <script defer src="utils.js"></script>
     <script defer src="catalog-data.js"></script>
+    <script defer src="product-search.js"></script>
     <script defer src="script.js"></script>
   </body>
 </html>
