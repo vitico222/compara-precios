@@ -641,6 +641,9 @@ function normalizeReceiptData(raw) {
       String(raw?.establishment ?? "")
         .trim()
         .slice(0, 80) || "Establecimiento general",
+    address: String(raw?.address ?? "")
+      .trim()
+      .slice(0, 160),
     date: receiptDate,
     items,
     itemsSum,
@@ -739,7 +742,7 @@ async function saveReceiptToCommunity(receipt) {
       productId: item.productId,
     }));
 
-    await db.collection("community_receipts").add({
+    const docData = {
       country: AppState.country,
       state: AppState.state,
       city: AppState.city,
@@ -753,7 +756,20 @@ async function saveReceiptToCommunity(receipt) {
       total: round2(receipt.total),
       userId: user.uid, // identificador anónimo; ya no se guarda el correo
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    if (receipt.address) docData.address = receipt.address;
+
+    try {
+      await db.collection("community_receipts").add(docData);
+    } catch (error) {
+      // Si las reglas de Firestore todavía no aceptan el campo "address", se guarda sin él
+      if (error.code === "permission-denied" && docData.address) {
+        delete docData.address;
+        await db.collection("community_receipts").add(docData);
+      } else {
+        throw error;
+      }
+    }
 
     clearOffersCache();
     return true;
@@ -888,6 +904,9 @@ async function fetchOffersForProduct(standardName) {
           offers.push({
             price,
             establishment: data.establishment || "Comercio local",
+            address: data.address || "",
+            city: data.city || "",
+            state: data.state || "",
             date: data.date || "",
             cityKey: data.cityKey || "",
             stateKey: data.stateKey || "",
@@ -1267,16 +1286,143 @@ function cleanShoppingQuery(query) {
     .trim();
 }
 
-function resultCardHtml(title, subtitle, statusHtml, note = "") {
+function resultCardHtml(title, subtitle, statusHtml, note = "", detailId = "") {
+  const clickable = detailId
+    ? ` role="button" tabindex="0" data-detail="${escapeHtml(detailId)}" aria-label="Ver detalles de ${escapeHtml(title)}"`
+    : "";
+  const more = detailId
+    ? '<div class="result-more">Ver detalles y dirección <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></div>'
+    : "";
   return `
-    <div class="product-result-card">
+    <div class="product-result-card${detailId ? " clickable" : ""}"${clickable}>
       <div class="result-head">
         <h4 class="result-title">${escapeHtml(title)}</h4>
         ${subtitle ? `<small class="result-query">${escapeHtml(subtitle)}</small>` : ""}
       </div>
       <div class="price-status">${statusHtml}</div>
       ${note ? `<div class="result-note">${escapeHtml(note)}</div>` : ""}
+      ${more}
     </div>`;
+}
+
+/* ---------- Ventana con el detalle de un precio ---------- */
+const GENERIC_ESTABLISHMENTS = ["Establecimiento general", "Comercio local"];
+const priceDetails = new Map();
+let priceDetailCounter = 0;
+let priceModalOpener = null;
+
+function registerPriceDetail(detail) {
+  const id = `d${++priceDetailCounter}`;
+  priceDetails.set(id, detail);
+  return id;
+}
+
+const storeLabel = (offer) =>
+  GENERIC_ESTABLISHMENTS.includes(offer.establishment)
+    ? "Comercio no identificado en el ticket"
+    : offer.establishment;
+
+function daysAgoLabel(dateIso) {
+  const time = dateIso ? new Date(`${dateIso}T12:00:00`).getTime() : NaN;
+  if (Number.isNaN(time)) return "fecha desconocida";
+  const days = Math.round((Date.now() - time) / 86400000);
+  if (days <= 0) return "hoy";
+  if (days === 1) return "ayer";
+  return `hace ${days} días`;
+}
+
+// Enlace al mapa: con la dirección si existe; si no, con el nombre del comercio (si lo tiene)
+function mapsUrl(offer) {
+  const hasName = !GENERIC_ESTABLISHMENTS.includes(offer.establishment);
+  const parts = offer.address
+    ? [offer.address, offer.city, offer.state]
+    : hasName
+      ? [offer.establishment, offer.city, offer.state]
+      : [];
+  const query = parts.filter(Boolean).join(", ");
+  return query
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    : "";
+}
+
+// Mejor precio de cada establecimiento, del más barato al más caro
+function bestPerEstablishment(offers) {
+  const best = new Map();
+  [...offers]
+    .sort(
+      (a, b) =>
+        a.price - b.price || String(b.date).localeCompare(String(a.date)),
+    )
+    .forEach((offer) => {
+      const key = normalizePlace(
+        `${offer.establishment}|${offer.address || ""}`,
+      );
+      if (!best.has(key)) best.set(key, offer);
+    });
+  return [...best.values()];
+}
+
+function priceDetailHtml(detail) {
+  const stores = bestPerEstablishment(detail.offers);
+  const top = stores[0];
+  const others = stores.slice(1, 5);
+  const place = [top.city, top.state].filter(Boolean).join(", ");
+  const tags = [
+    detail.basic ? "★ Canasta básica" : "",
+    prettyProductName(SCOPE_LABELS[detail.scope] || ""),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const address = top.address
+    ? escapeHtml(top.address)
+    : '<span class="price-detail-missing">Dirección no proporcionada</span>';
+  const map = mapsUrl(top);
+
+  let html = `<h3 id="price-modal-title" class="price-detail-title">${escapeHtml(prettyProductName(detail.title))}</h3>`;
+  if (tags) html += `<p class="price-detail-tags">${escapeHtml(tags)}</p>`;
+  html += `
+    <div class="price-detail-best">
+      <div class="price-detail-label">Mejor precio encontrado</div>
+      <div class="price-detail-price">${escapeHtml(formatMoney(top.price))} <small>c/u</small></div>
+      <div class="price-detail-row"><i class="fa-solid fa-store" aria-hidden="true"></i><span>${escapeHtml(storeLabel(top))}</span></div>
+      <div class="price-detail-row"><i class="fa-solid fa-location-dot" aria-hidden="true"></i><span>${address}</span></div>
+      ${place ? `<div class="price-detail-row"><i class="fa-solid fa-city" aria-hidden="true"></i><span>${escapeHtml(place)}</span></div>` : ""}
+      <div class="price-detail-row"><i class="fa-regular fa-clock" aria-hidden="true"></i><span>Registrado ${escapeHtml(daysAgoLabel(top.date))}${top.date ? ` (${escapeHtml(top.date)})` : ""}</span></div>
+      ${top.key && top.key !== detail.title ? `<div class="price-detail-row"><i class="fa-solid fa-tag" aria-hidden="true"></i><span>Producto: ${escapeHtml(prettyProductName(top.key))}</span></div>` : ""}
+    </div>`;
+  if (map) {
+    html += `<a class="btn-3d primary-btn price-detail-map" href="${escapeHtml(map)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-diamond-turn-right" aria-hidden="true"></i> Cómo llegar</a>`;
+  }
+  if (others.length > 0) {
+    html += `<h4 class="price-detail-sub">Otros precios encontrados</h4><ul class="price-detail-others">${others
+      .map(
+        (offer) =>
+          `<li><span>${escapeHtml(storeLabel(offer))}${offer.city ? ` · ${escapeHtml(offer.city)}` : ""}</span><strong>${escapeHtml(formatMoney(offer.price))}</strong></li>`,
+      )
+      .join("")}</ul>`;
+  }
+  html += `<p class="price-detail-foot">Basado en ${detail.offers.length} registro(s) de la comunidad. Los precios pueden haber cambiado.</p>`;
+  return html;
+}
+
+function openPriceDetail(id) {
+  const detail = priceDetails.get(id);
+  const modal = $("price-modal");
+  if (!detail || !modal || detail.offers.length === 0) return;
+  $("price-modal-body").innerHTML = priceDetailHtml(detail);
+  priceModalOpener = document.activeElement;
+  modal.classList.remove("hidden");
+  const closeButton = $("btn-close-price");
+  if (closeButton) closeButton.focus();
+}
+
+function closePriceModal() {
+  const modal = $("price-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  if (priceModalOpener && typeof priceModalOpener.focus === "function")
+    priceModalOpener.focus();
+  priceModalOpener = null;
 }
 
 // Nombres con los que puede estar guardado el producto: el texto escrito tal cual,
@@ -1337,6 +1483,7 @@ async function findBestOffer(keys, days = SETTINGS.listDays) {
     if (pool.length > 0) {
       return {
         best: { offer: pickBestOffer(pool), scope, count: pool.length },
+        pool,
         totalOffers,
         keys,
       };
@@ -1378,6 +1525,7 @@ function bestOfferStatusHtml(best, info) {
 }
 
 async function optimizeShoppingList() {
+  priceDetails.clear();
   if (AppState.shoppingList.length === 0) return;
   if (!hasRegionConfig()) {
     openRegionalModal();
@@ -1424,6 +1572,16 @@ async function optimizeShoppingList() {
         row.plan.interpreted &&
         row.info.tier > 0 &&
         row.best.offer.key !== row.plan.interpreted;
+      const detailId = row.best
+        ? registerPriceDetail({
+            title: row.title,
+            offers: row.info.pool,
+            scope: row.best.scope,
+            basic: Boolean(
+              standardProductCatalog.find((p) => p.name === row.title)?.basic,
+            ),
+          })
+        : "";
       html += resultCardHtml(
         row.title,
         `Buscado: "${row.query}"`,
@@ -1431,6 +1589,7 @@ async function optimizeShoppingList() {
         usedFallback
           ? `Aún no hay registros de ${prettyProductName(row.plan.interpreted)}: se muestra el producto más cercano.`
           : "",
+        detailId,
       );
     });
     if (withPrice > 0) {
@@ -1454,6 +1613,7 @@ async function runProductSearch() {
   const container = $("search-results-container");
   const query = $("product-search-input").value.trim();
   const token = ++searchToken;
+  priceDetails.clear();
 
   if (query.length < 2) {
     container.innerHTML =
@@ -1507,7 +1667,14 @@ async function runProductSearch() {
     html += resultCardHtml(
       name,
       `${basicNames.has(name) ? "★ Canasta básica · " : ""}${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
-      `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> c/u en ${escapeHtml(best.establishment)}`,
+      `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> c/u en ${escapeHtml(storeLabel(best))}`,
+      "",
+      registerPriceDetail({
+        title: name,
+        offers: offers.map((offer) => ({ ...offer, key: name })),
+        scope,
+        basic: basicNames.has(name),
+      }),
     );
   });
   container.innerHTML =
@@ -1518,6 +1685,147 @@ async function runProductSearch() {
 function scheduleSearch() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(runProductSearch, SETTINGS.searchDebounceMs);
+}
+
+/* ========================================== */
+/* 12 bis. PUBLICIDAD DE LA PANTALLA DE INICIO */
+/* ========================================== */
+// Los anuncios se definen en ads.js. En móvil se muestran como carrusel y en tablet y PC
+// como tres espacios fijos (lo decide el CSS). Todo el texto se escapa antes de mostrarse.
+function safeAdUrl(url) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url, location.href);
+    return ["https:", "http:", "mailto:"].includes(parsed.protocol)
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function adHtml(ad) {
+  const tag = `<span class="ad-tag">${ad.type === "house" ? "Compara Precios" : "Publicidad"}</span>`;
+
+  if (ad.type === "image") {
+    const href = safeAdUrl(ad.url);
+    const src = safeAdUrl(ad.image);
+    if (!href || !src) return "";
+    return `<a class="ad-slot ad-image" href="${escapeHtml(href)}" target="_blank" rel="sponsored noopener noreferrer" aria-label="Publicidad: ${escapeHtml(ad.alt || "")}">${tag}<img src="${escapeHtml(src)}" alt="${escapeHtml(ad.alt || "")}" loading="lazy" /></a>`;
+  }
+
+  const theme = ["teal", "blue", "green"].includes(ad.theme)
+    ? ad.theme
+    : "teal";
+  const href = safeAdUrl(ad.url);
+  const clickable = Boolean(ad.action) || Boolean(href);
+  const body = `${tag}<span class="ad-title">${escapeHtml(ad.title || "")}</span><span class="ad-text">${escapeHtml(ad.text || "")}</span>${
+    ad.cta && clickable
+      ? `<span class="ad-cta">${escapeHtml(ad.cta)}</span>`
+      : ""
+  }`;
+
+  if (ad.action) {
+    return `<button type="button" class="ad-slot ad-theme-${theme}" data-ad-action="${escapeHtml(ad.action)}">${body}</button>`;
+  }
+  if (href) {
+    const external = href.startsWith("http");
+    return `<a class="ad-slot ad-theme-${theme}" href="${escapeHtml(href)}"${
+      external ? ' target="_blank" rel="sponsored noopener noreferrer"' : ""
+    }>${body}</a>`;
+  }
+  return `<div class="ad-slot ad-theme-${theme}">${body}</div>`;
+}
+
+async function shareApp() {
+  const url = `${location.origin}/`;
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: "Compara Precios",
+        text: "Compara precios de supermercado escaneando tus recibos.",
+        url,
+      });
+      return;
+    }
+  } catch (error) {
+    if (error.name === "AbortError") return; // la persona cerró el menú de compartir
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Enlace copiado");
+  } catch {
+    showToast(url);
+  }
+}
+
+let adCarousel = null;
+
+function renderAds() {
+  const zone = $("ad-zone");
+  const track = $("ad-track");
+  if (!zone || !track) return;
+  const slides = (typeof ADS !== "undefined" ? ADS : [])
+    .slice(0, 3)
+    .map(adHtml)
+    .filter(Boolean);
+  if (slides.length === 0) {
+    zone.classList.add("hidden");
+    return;
+  }
+  track.innerHTML = slides.join("");
+  $("ad-dots").innerHTML = slides
+    .map(
+      (_, i) =>
+        `<button type="button" class="ad-dot" data-ad-dot="${i}" aria-label="Ver anuncio ${i + 1}"></button>`,
+    )
+    .join("");
+  initAdCarousel(slides.length);
+}
+
+function initAdCarousel(count) {
+  const track = $("ad-track");
+  const mobile = window.matchMedia("(max-width: 767.98px)");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const rotateMs = typeof AD_ROTATE_MS === "number" ? AD_ROTATE_MS : 6000;
+  let timer = null;
+
+  const current = () =>
+    Math.round(track.scrollLeft / Math.max(track.clientWidth, 1));
+  const goTo = (index) =>
+    track.scrollTo({
+      left: index * track.clientWidth,
+      behavior: reduceMotion.matches ? "auto" : "smooth",
+    });
+  const paintDots = () => {
+    const active = current();
+    document
+      .querySelectorAll("[data-ad-dot]")
+      .forEach((dot, i) => dot.classList.toggle("active", i === active));
+  };
+  const stop = () => {
+    clearInterval(timer);
+    timer = null;
+  };
+  const start = () => {
+    stop();
+    if (!mobile.matches || reduceMotion.matches || count < 2 || rotateMs <= 0)
+      return;
+    timer = setInterval(() => {
+      const home = $("view-home");
+      if (document.hidden || !home || !home.classList.contains("active-view"))
+        return;
+      goTo((current() + 1) % count);
+    }, rotateMs);
+  };
+
+  track.addEventListener("scroll", paintDots, { passive: true });
+  track.addEventListener("touchstart", stop, { passive: true });
+  track.addEventListener("touchend", start, { passive: true });
+  mobile.addEventListener("change", start);
+  adCarousel = { goTo };
+  paintDots();
+  start();
 }
 
 /* ========================================== */
@@ -1532,6 +1840,7 @@ function initEventListeners() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      closePriceModal();
       closeAlertModal();
       if (hasRegionConfig()) closeRegionalModal();
       return;
@@ -1566,6 +1875,44 @@ function initEventListeners() {
   });
   $("btn-process-receipt").addEventListener("click", processReceiptWithGemini);
   $("btn-close-alert").addEventListener("click", closeAlertModal);
+
+  // Anuncios: botones de la propia app y puntos del carrusel
+  const adZone = $("ad-zone");
+  if (adZone) {
+    adZone.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-ad-action]");
+      if (action) {
+        const name = action.dataset.adAction;
+        if (["scan", "list", "search"].includes(name)) switchView(name);
+        else if (name === "share") shareApp();
+        return;
+      }
+      const dot = event.target.closest("[data-ad-dot]");
+      if (dot && adCarousel) adCarousel.goTo(Number(dot.dataset.adDot));
+    });
+  }
+
+  // Detalle de un precio: tocar una tarjeta lo abre; la X o tocar fuera de la ventana lo cierra
+  ["search-results-container", "optimization-result-container"].forEach(
+    (id) => {
+      const container = $(id);
+      if (!container) return;
+      container.addEventListener("click", (event) => {
+        const card = event.target.closest("[data-detail]");
+        if (card) openPriceDetail(card.dataset.detail);
+      });
+    },
+  );
+  const priceModal = $("price-modal");
+  if (priceModal) {
+    priceModal.addEventListener("click", (event) => {
+      if (
+        event.target === priceModal ||
+        event.target.closest("#btn-close-price")
+      )
+        closePriceModal();
+    });
+  }
 
   // Lista de compras
   $("btn-add-shopping-item").addEventListener("click", addShoppingItem);
@@ -1625,6 +1972,7 @@ function initApp() {
   initEventListeners();
   checkRegionalConfig();
   renderShoppingList();
+  renderAds();
   showInitialView();
   ensureAuth(); // inicia sesión anónima en segundo plano
 }

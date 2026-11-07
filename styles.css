@@ -1037,3 +1037,328 @@ img {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* ========================================== */
+/* 14. DETALLE DE UN PRECIO (VENTANA)         */
+/* ========================================== */
+.product-result-card.clickable {
+  cursor: pointer;
+}
+
+.result-more {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.price-detail {
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #eef3f6;
+  color: var(--text-color);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: var(--transition-speed);
+}
+
+.modal-close:hover {
+  background: #dde6eb;
+}
+
+.price-detail-title {
+  padding-right: 2.8rem;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  color: var(--primary-blue);
+}
+
+.price-detail-tags {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.price-detail-best {
+  margin: 0.9rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 168, 204, 0.2);
+  border-radius: 0.9rem;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 168, 204, 0.08),
+    rgba(20, 128, 63, 0.08)
+  );
+}
+
+.price-detail-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.price-detail-price {
+  margin: 0.2rem 0 0.7rem;
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--saving-green);
+}
+
+.price-detail-price small {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.price-detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+}
+
+.price-detail-row i {
+  width: 1.1rem;
+  margin-top: 0.2rem;
+  text-align: center;
+  color: var(--accent-teal);
+}
+
+.price-detail-missing {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.price-detail-map {
+  text-decoration: none;
+}
+
+.price-detail-sub {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.9rem;
+  color: var(--primary-blue);
+}
+
+.price-detail-others {
+  list-style: none;
+}
+
+.price-detail-others li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #e5e9ec;
+  font-size: 0.9rem;
+}
+
+.price-detail-foot {
+  margin-top: 0.9rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ========================================== */
+/* 15. PANTALLA DE INICIO Y PUBLICIDAD        */
+/* ========================================== */
+:root {
+  --dash-card-height: 8.75rem; /* misma altura para los botones y los espacios de anuncios */
+}
+
+.dash-card {
+  height: var(--dash-card-height);
+  padding: 1rem 0.75rem;
+  overflow: hidden;
+}
+
+.ad-zone {
+  grid-column: 1 / -1;
+  position: relative;
+}
+
+/* Móvil: carrusel que se desliza */
+.ad-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--border-radius);
+}
+
+.ad-track::-webkit-scrollbar {
+  display: none;
+}
+
+.ad-slot {
+  position: relative;
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  height: var(--dash-card-height);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 1rem 1.1rem;
+  border: none;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-light);
+  color: #ffffff;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  overflow: hidden;
+}
+
+button.ad-slot,
+a.ad-slot {
+  cursor: pointer;
+}
+
+.ad-theme-teal {
+  background: linear-gradient(135deg, #00a8cc, #0d3b66);
+}
+
+.ad-theme-blue {
+  background: linear-gradient(135deg, #1f6fb5, #0d3b66);
+}
+
+.ad-theme-green {
+  background: linear-gradient(135deg, #1b9a59, #0d3b66);
+}
+
+.ad-slot.ad-image {
+  padding: 0;
+  background: #ffffff;
+}
+
+.ad-slot.ad-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ad-tag {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.6rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+  font-size: 0.65rem;
+  letter-spacing: 0.06rem;
+  text-transform: uppercase;
+}
+
+.ad-title {
+  padding-right: 4.5rem;
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ad-text {
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.ad-cta {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  padding: 0.28rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.ad-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.5rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.ad-dot {
+  position: relative;
+  width: 0.45rem;
+  height: 0.45rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: var(--transition-speed);
+}
+
+/* Zona táctil más grande que el punto */
+.ad-dot::after {
+  content: "";
+  position: absolute;
+  inset: -0.6rem;
+}
+
+.ad-dot.active {
+  width: 1.1rem;
+  border-radius: 0.3rem;
+  background: #ffffff;
+}
+
+@media (max-width: 767.98px) {
+  /* "Escanear" ocupa todo el ancho; lista y consulta van lado a lado */
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dash-scan {
+    grid-column: 1 / -1;
+  }
+
+  .dash-card span {
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+}
+
+@media (min-width: 768px) {
+  /* Tablet y PC: tres anuncios fijos debajo de los tres botones */
+  .ad-track {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .ad-dots {
+    display: none;
+  }
+}

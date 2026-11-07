@@ -184,7 +184,11 @@
         </div>
 
         <div class="dashboard-grid">
-          <button type="button" class="dash-card card-3d" data-view="scan">
+          <button
+            type="button"
+            class="dash-card dash-scan card-3d"
+            data-view="scan"
+          >
             <i class="fa-solid fa-camera-retro" aria-hidden="true"></i>
             <span>Escanear recibo</span>
           </button>
@@ -199,6 +203,13 @@
             ></i>
             <span>Consultar precios</span>
           </button>
+
+          <!-- Publicidad: carrusel en móvil; tres espacios fijos en tablet y PC.
+               El contenido se define en ads.js -->
+          <section id="ad-zone" class="ad-zone" aria-label="Publicidad">
+            <div id="ad-track" class="ad-track"></div>
+            <div id="ad-dots" class="ad-dots"></div>
+          </section>
         </div>
       </section>
 
@@ -465,6 +476,26 @@
       </div>
     </div>
 
+    <!-- DETALLE DE UN PRECIO (Consultar precios y Lista inteligente) -->
+    <div id="price-modal" class="modal-overlay hidden">
+      <div
+        class="modal-content card-3d price-detail"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="price-modal-title"
+      >
+        <button
+          type="button"
+          id="btn-close-price"
+          class="modal-close"
+          aria-label="Cerrar"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+        <div id="price-modal-body"></div>
+      </div>
+    </div>
+
     <!-- Mensajes breves (guardado, errores leves) -->
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
@@ -473,6 +504,7 @@
     <script defer src="utils.js"></script>
     <script defer src="catalog-data.js"></script>
     <script defer src="product-search.js"></script>
+    <script defer src="ads.js"></script>
     <script defer src="script.js"></script>
   </body>
 </html>
