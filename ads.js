@@ -1,61 +1,28 @@
 /* ========================================== */
-/* ADS.JS - ESPACIOS DE PUBLICIDAD DEL INICIO */
+/* ADS.JS - CONFIGURACIÓN DE GOOGLE ADSENSE   */
 /* ========================================== */
 /*
-  Este archivo es tuyo: edítalo cuando quieras y no hace falta tocar nada más.
-  Los anuncios se muestran en la pantalla de inicio: en el móvil como un carrusel y en
-  tablet y PC como tres espacios fijos. Se usan como máximo los 3 primeros de la lista.
+  Este archivo es tuyo. Mientras ADSENSE_CLIENT esté vacío, la app NO carga ningún script
+  de Google ni muestra espacios de anuncio.
 
-  Tipos de anuncio
-  - "house":   promoción de la propia app. Lleva la etiqueta "Compara Precios".
-               "action" puede ser: "scan", "list", "search" o "share".
-  - "sponsor": anuncio de un anunciante, con texto y enlace. Lleva la etiqueta "Publicidad".
-  - "image":   anuncio con imagen (banner) y enlace. Lleva la etiqueta "Publicidad".
-               Pon la imagen en assets/ads/ (se recomienda 640 x 280 px, JPG o WebP).
+  Cuándo y cómo rellenarlo (cuando AdSense apruebe tu sitio):
+  1. En AdSense: Anuncios > Por bloque de anuncios > Anuncios display, "Tamaño fijo".
+     Crea DOS bloques: uno de 300 x 250 para "search" y otro de 300 x 250 para "list".
+  2. Copia tu ID de editor (empieza por "ca-pub-") y el ID numérico de cada bloque.
+  3. Pégalos aquí abajo y cambia ADSENSE_TEST_MODE a false cuando todo se vea bien.
 
-  Colores de los anuncios de texto (theme): "teal", "blue" o "green".
+  Dónde se muestran (y dónde NUNCA):
+  - "search": en "Consultar precios", después del tercer resultado.
+  - "list":   en "Lista inteligente", al final de los resultados.
+  - Nunca en la pantalla de inicio, en el escaneo, en la ventana de detalle, ni junto a los
+    botones de navegación: así se respetan las políticas de colocación de AdSense.
+
+  Importante: nunca toques tus propios anuncios. Mientras pruebas, deja ADSENSE_TEST_MODE en true.
 */
 
-// Cada cuántos milisegundos cambia el anuncio en el móvil (0 = no cambia solo)
-const AD_ROTATE_MS = 6000;
-
-// Cambia esto por tu correo real. Mientras diga "ejemplo.com", el espacio
-// "Anuncia aquí" se muestra sin botón de contacto.
-const AD_CONTACT_EMAIL = "tu-correo@ejemplo.com";
-
-const ADS = [
-  {
-    type: "house",
-    theme: "teal",
-    title: "Escanea tus recibos",
-    text: "Cada ticket ayuda a toda la comunidad a ahorrar.",
-    cta: "Escanear ahora",
-    action: "scan",
-  },
-  {
-    type: "house",
-    theme: "blue",
-    title: "Invita a tu familia",
-    text: "Más recibos significan mejores precios para todos.",
-    cta: "Compartir la app",
-    action: "share",
-  },
-  {
-    type: "sponsor",
-    theme: "green",
-    title: "Anuncia aquí",
-    text: "Llega a compradores de tu ciudad.",
-    cta: "Escríbenos",
-    url: AD_CONTACT_EMAIL.includes("ejemplo.com")
-      ? ""
-      : `mailto:${AD_CONTACT_EMAIL}?subject=${encodeURIComponent("Quiero anunciar en Compara Precios")}`,
-  },
-
-  // Ejemplo de anuncio con imagen de un anunciante (quita las barras // para activarlo):
-  // {
-  //   type: "image",
-  //   image: "assets/ads/mi-anunciante.jpg",
-  //   alt: "Nombre del comercio: oferta de la semana",
-  //   url: "https://www.sitio-del-anunciante.com",
-  // },
-];
+const ADSENSE_CLIENT = ""; // ejemplo: "ca-pub-1234567890123456"
+const ADSENSE_TEST_MODE = true;
+const ADSENSE_SLOTS = {
+  search: "", // ID numérico del bloque 300 x 250 de "Consultar precios"
+  list: "", // ID numérico del bloque 300 x 250 de "Lista inteligente"
+};

@@ -1595,7 +1595,9 @@ async function optimizeShoppingList() {
     if (withPrice > 0) {
       html += `<p class="ticket-total optimized">Total estimado (${withPrice} de ${rows.length} productos): ${escapeHtml(formatMoney(estimatedTotal))}</p>`;
     }
+    html += adBlockHtml("list");
     container.innerHTML = html;
+    mountAds(container);
     listOptimized = true;
     container.scrollIntoView({ behavior: "smooth" });
   } finally {
@@ -1654,7 +1656,8 @@ async function runProductSearch() {
   if (token !== searchToken) return; // llegó una búsqueda más reciente
 
   let html = "";
-  rows.forEach(({ name, offers }) => {
+  rows.forEach(({ name, offers }, index) => {
+    if (index === 3) html += adBlockHtml("search"); // tras el tercer resultado
     if (offers.length === 0) {
       html += resultCardHtml(
         name,
@@ -1677,9 +1680,11 @@ async function runProductSearch() {
       }),
     );
   });
+  if (rows.length >= 2 && rows.length <= 3) html += adBlockHtml("search"); // pocos resultados: al final
   container.innerHTML =
     html ||
     '<p class="section-subtitle">No encontramos productos con ese nombre.</p>';
+  mountAds(container);
 }
 
 function scheduleSearch() {
@@ -1688,144 +1693,74 @@ function scheduleSearch() {
 }
 
 /* ========================================== */
-/* 12 bis. PUBLICIDAD DE LA PANTALLA DE INICIO */
+/* 12 bis. PUBLICIDAD (GOOGLE ADSENSE)        */
 /* ========================================== */
-// Los anuncios se definen en ads.js. En móvil se muestran como carrusel y en tablet y PC
-// como tres espacios fijos (lo decide el CSS). Todo el texto se escapa antes de mostrarse.
-function safeAdUrl(url) {
-  if (!url) return "";
-  try {
-    const parsed = new URL(url, location.href);
-    return ["https:", "http:", "mailto:"].includes(parsed.protocol)
-      ? parsed.href
-      : "";
-  } catch {
-    return "";
-  }
+// Los anuncios solo aparecen en pantallas con contenido (resultados), nunca en el inicio
+// ni junto a botones de navegación. Mientras ads.js no tenga tus datos de AdSense no se
+// muestra nada ni se carga ningún script de Google.
+// Tamaños fijos estándar de AdSense: 300 x 250 (rectángulo mediano) y 250 x 250 (cuadrado),
+// este último solo para pantallas muy estrechas.
+const AD_SIZES = [
+  { width: 300, height: 250 },
+  { width: 250, height: 250 },
+];
+
+const pickAdSize = (availableWidth) =>
+  AD_SIZES.find((size) => size.width <= availableWidth) || null;
+
+function adsenseReady(placement) {
+  return (
+    typeof ADSENSE_CLIENT !== "undefined" &&
+    /^ca-pub-\d{10,20}$/.test(ADSENSE_CLIENT) &&
+    typeof ADSENSE_SLOTS !== "undefined" &&
+    /^\d{6,20}$/.test(String(ADSENSE_SLOTS[placement] || ""))
+  );
 }
 
-function adHtml(ad) {
-  const tag = `<span class="ad-tag">${ad.type === "house" ? "Compara Precios" : "Publicidad"}</span>`;
-
-  if (ad.type === "image") {
-    const href = safeAdUrl(ad.url);
-    const src = safeAdUrl(ad.image);
-    if (!href || !src) return "";
-    return `<a class="ad-slot ad-image" href="${escapeHtml(href)}" target="_blank" rel="sponsored noopener noreferrer" aria-label="Publicidad: ${escapeHtml(ad.alt || "")}">${tag}<img src="${escapeHtml(src)}" alt="${escapeHtml(ad.alt || "")}" loading="lazy" /></a>`;
-  }
-
-  const theme = ["teal", "blue", "green"].includes(ad.theme)
-    ? ad.theme
-    : "teal";
-  const href = safeAdUrl(ad.url);
-  const clickable = Boolean(ad.action) || Boolean(href);
-  const body = `${tag}<span class="ad-title">${escapeHtml(ad.title || "")}</span><span class="ad-text">${escapeHtml(ad.text || "")}</span>${
-    ad.cta && clickable
-      ? `<span class="ad-cta">${escapeHtml(ad.cta)}</span>`
-      : ""
-  }`;
-
-  if (ad.action) {
-    return `<button type="button" class="ad-slot ad-theme-${theme}" data-ad-action="${escapeHtml(ad.action)}">${body}</button>`;
-  }
-  if (href) {
-    const external = href.startsWith("http");
-    return `<a class="ad-slot ad-theme-${theme}" href="${escapeHtml(href)}"${
-      external ? ' target="_blank" rel="sponsored noopener noreferrer"' : ""
-    }>${body}</a>`;
-  }
-  return `<div class="ad-slot ad-theme-${theme}">${body}</div>`;
+// Espacio reservado con etiqueta "Publicidad" y 2 rem de aire arriba y abajo
+function adBlockHtml(placement) {
+  if (!adsenseReady(placement)) return "";
+  return `<div class="ad-wrap"><span class="ad-label">Publicidad</span><div class="ad-box" data-ad-box data-placement="${escapeHtml(placement)}"></div></div>`;
 }
 
-async function shareApp() {
-  const url = `${location.origin}/`;
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: "Compara Precios",
-        text: "Compara precios de supermercado escaneando tus recibos.",
-        url,
-      });
+let adsenseScriptLoaded = false;
+
+function loadAdsenseScript() {
+  if (adsenseScriptLoaded) return;
+  adsenseScriptLoaded = true;
+  const script = document.createElement("script");
+  script.async = true;
+  script.crossOrigin = "anonymous";
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(ADSENSE_CLIENT)}`;
+  document.head.appendChild(script);
+}
+
+// Convierte cada espacio reservado en un bloque de AdSense del tamaño exacto
+function mountAds(container) {
+  if (!container) return;
+  container.querySelectorAll("[data-ad-box]").forEach((box) => {
+    const wrap = box.closest(".ad-wrap");
+    const size = pickAdSize(box.clientWidth);
+    const placement = box.dataset.placement;
+    if (!size || !adsenseReady(placement)) {
+      if (wrap) wrap.remove(); // sin espacio suficiente: no se muestra el anuncio
       return;
     }
-  } catch (error) {
-    if (error.name === "AbortError") return; // la persona cerró el menú de compartir
-  }
-  try {
-    await navigator.clipboard.writeText(url);
-    showToast("Enlace copiado");
-  } catch {
-    showToast(url);
-  }
-}
-
-let adCarousel = null;
-
-function renderAds() {
-  const zone = $("ad-zone");
-  const track = $("ad-track");
-  if (!zone || !track) return;
-  const slides = (typeof ADS !== "undefined" ? ADS : [])
-    .slice(0, 3)
-    .map(adHtml)
-    .filter(Boolean);
-  if (slides.length === 0) {
-    zone.classList.add("hidden");
-    return;
-  }
-  track.innerHTML = slides.join("");
-  $("ad-dots").innerHTML = slides
-    .map(
-      (_, i) =>
-        `<button type="button" class="ad-dot" data-ad-dot="${i}" aria-label="Ver anuncio ${i + 1}"></button>`,
-    )
-    .join("");
-  initAdCarousel(slides.length);
-}
-
-function initAdCarousel(count) {
-  const track = $("ad-track");
-  const mobile = window.matchMedia("(max-width: 767.98px)");
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const rotateMs = typeof AD_ROTATE_MS === "number" ? AD_ROTATE_MS : 6000;
-  let timer = null;
-
-  const current = () =>
-    Math.round(track.scrollLeft / Math.max(track.clientWidth, 1));
-  const goTo = (index) =>
-    track.scrollTo({
-      left: index * track.clientWidth,
-      behavior: reduceMotion.matches ? "auto" : "smooth",
-    });
-  const paintDots = () => {
-    const active = current();
-    document
-      .querySelectorAll("[data-ad-dot]")
-      .forEach((dot, i) => dot.classList.toggle("active", i === active));
-  };
-  const stop = () => {
-    clearInterval(timer);
-    timer = null;
-  };
-  const start = () => {
-    stop();
-    if (!mobile.matches || reduceMotion.matches || count < 2 || rotateMs <= 0)
-      return;
-    timer = setInterval(() => {
-      const home = $("view-home");
-      if (document.hidden || !home || !home.classList.contains("active-view"))
-        return;
-      goTo((current() + 1) % count);
-    }, rotateMs);
-  };
-
-  track.addEventListener("scroll", paintDots, { passive: true });
-  track.addEventListener("touchstart", stop, { passive: true });
-  track.addEventListener("touchend", start, { passive: true });
-  mobile.addEventListener("change", start);
-  adCarousel = { goTo };
-  paintDots();
-  start();
+    const ins = document.createElement("ins");
+    ins.className = "adsbygoogle";
+    ins.style.cssText = `display:inline-block;width:${size.width}px;height:${size.height}px`;
+    ins.dataset.adClient = ADSENSE_CLIENT;
+    ins.dataset.adSlot = String(ADSENSE_SLOTS[placement]);
+    if (typeof ADSENSE_TEST_MODE !== "undefined" && ADSENSE_TEST_MODE)
+      ins.dataset.adtest = "on";
+    box.appendChild(ins);
+    loadAdsenseScript();
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (error) {
+      console.warn("AdSense:", error);
+    }
+  });
 }
 
 /* ========================================== */
@@ -1875,22 +1810,6 @@ function initEventListeners() {
   });
   $("btn-process-receipt").addEventListener("click", processReceiptWithGemini);
   $("btn-close-alert").addEventListener("click", closeAlertModal);
-
-  // Anuncios: botones de la propia app y puntos del carrusel
-  const adZone = $("ad-zone");
-  if (adZone) {
-    adZone.addEventListener("click", (event) => {
-      const action = event.target.closest("[data-ad-action]");
-      if (action) {
-        const name = action.dataset.adAction;
-        if (["scan", "list", "search"].includes(name)) switchView(name);
-        else if (name === "share") shareApp();
-        return;
-      }
-      const dot = event.target.closest("[data-ad-dot]");
-      if (dot && adCarousel) adCarousel.goTo(Number(dot.dataset.adDot));
-    });
-  }
 
   // Detalle de un precio: tocar una tarjeta lo abre; la X o tocar fuera de la ventana lo cierra
   ["search-results-container", "optimization-result-container"].forEach(
@@ -1972,7 +1891,6 @@ function initApp() {
   initEventListeners();
   checkRegionalConfig();
   renderShoppingList();
-  renderAds();
   showInitialView();
   ensureAuth(); // inicia sesión anónima en segundo plano
 }

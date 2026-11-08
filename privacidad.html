@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Política de privacidad · Compara Precios</title>
+    <meta
+      name="description"
+      content="Qué datos trata Compara Precios, para qué se usan, qué ven otras personas y cómo pedir que se elimine un recibo."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0d3b66" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="assets/favicon_compara_precios.svg"
+    />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <script defer src="site-config.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <a class="logo-container" href="./" title="Ir a la app">
+        <img
+          src="assets/logo_compara_precios.png"
+          alt="Logo Compara Precios"
+          class="app-logo"
+        />
+        <strong class="header-title">Compara Precios</strong>
+      </a>
+    </header>
+
+    <main class="app-main-container">
+      <article class="legal-page card-3d">
+        <!--
+          REVISAR ANTES DE PUBLICAR (esto no se ve en la página):
+          1. Verifica que lo que dice aquí coincida con lo que la app hace de verdad.
+          2. Lee los términos vigentes de la API de Gemini: según el plan que uses, Google
+             puede tratar las imágenes de forma distinta (por ejemplo, para mejorar sus
+             productos). Si es así, ajusta la sección 3.
+          3. Confirma que las reglas de Firestore estén publicadas (sección 11).
+          4. Si no usas AdSense, puedes quitar la sección 7.
+        -->
+        <h1>Política de privacidad</h1>
+        <p class="legal-updated">
+          Última actualización: <span data-site="updated">fecha</span>
+        </p>
+        <p class="legal-lead">
+          Esta política explica qué información trata Compara Precios, para qué
+          la usa y qué opciones tienes. Está escrita para que se entienda, sin
+          letra chica.
+        </p>
+
+        <h2>1. Quiénes somos</h2>
+        <p>
+          Compara Precios (<span data-site="url">dirección del sitio</span>) es
+          operada por <strong data-site="owner">tu nombre</strong>, desde
+          <span data-site="location">tu ciudad</span>. Para cualquier consulta
+          sobre esta política, usa la página de
+          <a href="contacto.html">Contacto</a>.
+        </p>
+
+        <h2>2. Qué información tratamos</h2>
+        <ul>
+          <li>
+            <strong>Datos del recibo que compartes:</strong> nombres de
+            productos, cantidades, precios, total, fecha, y el nombre y la
+            dirección del comercio cuando aparecen en el ticket.
+          </li>
+          <li>
+            <strong>Tu ubicación aproximada:</strong> el país, el estado, la
+            ciudad y la moneda que escribes tú al configurar la app. No usamos
+            el GPS de tu dispositivo.
+          </li>
+          <li>
+            <strong>Un identificador anónimo:</strong> la app inicia sesión de
+            forma anónima con Firebase (Google). Se genera un código sin nombre
+            ni correo, asociado a los recibos que subes.
+          </li>
+          <li>
+            <strong>Datos en tu propio dispositivo:</strong> tu región, tu lista
+            de compras y archivos de la app para que funcione sin conexión.
+          </li>
+          <li>
+            <strong>No recopilamos</strong> tu nombre, correo, teléfono,
+            contactos ni ubicación GPS.
+          </li>
+        </ul>
+
+        <h2>3. La foto de tu recibo</h2>
+        <p>
+          La foto se reduce de tamaño en tu dispositivo y se envía a nuestro
+          servicio de análisis, alojado en Cloudflare, que la transmite a la API
+          de Gemini (Google) para extraer el texto del ticket.
+          <strong>Nosotros no guardamos la foto.</strong> Google la procesa
+          conforme a sus propios términos y a su política de privacidad.
+        </p>
+        <p>
+          Procura que en la foto no se vean datos personales, como tu nombre, tu
+          cédula o RIF, o números de tarjeta.
+        </p>
+
+        <h2>4. Para qué usamos la información</h2>
+        <ul>
+          <li>Leer tu recibo y mostrarte la comparación de precios.</li>
+          <li>
+            Construir los precios de la comunidad: los datos de los recibos, sin
+            tu identidad, se muestran a otras personas para que puedan comparar.
+          </li>
+          <li>
+            Mantener y mejorar el servicio, y evitar abusos o datos falsos.
+          </li>
+          <li>Mostrar publicidad, cuando esté activa (ver sección 7).</li>
+        </ul>
+
+        <h2>5. Qué ven otras personas</h2>
+        <p>
+          Los datos del recibo (productos, precios, comercio, dirección, ciudad
+          y fecha) son visibles para las demás personas usuarias,
+          <strong>sin tu nombre ni tu correo</strong>. El identificador anónimo
+          existe en la base de datos, pero no se muestra en la app.
+        </p>
+
+        <h2>6. Servicios de terceros</h2>
+        <p>Para funcionar, la app usa estos servicios:</p>
+        <ul>
+          <li>Firebase (Google): base de datos y sesión anónima.</li>
+          <li>
+            Cloudflare: servicio de análisis de recibos y entrega de iconos.
+          </li>
+          <li>Google (API de Gemini): lectura del texto de la imagen.</li>
+          <li>Netlify: alojamiento del sitio.</li>
+          <li>jsDelivr y Google (gstatic): librerías de la app.</li>
+        </ul>
+        <p>
+          Al cargar la app, estos servicios pueden recibir datos técnicos, como
+          tu dirección IP y el navegador que usas.
+        </p>
+
+        <h2>7. Publicidad</h2>
+        <p>
+          La app puede mostrar anuncios de Google AdSense en algunas pantallas
+          de resultados. Siempre se identifican con la etiqueta “Publicidad”.
+          Google y sus socios pueden usar cookies o identificadores para mostrar
+          anuncios y medir su rendimiento, incluida la personalización según tu
+          actividad.
+        </p>
+        <p>
+          Puedes gestionar o desactivar la personalización en
+          <a
+            href="https://adssettings.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            >la configuración de anuncios de Google</a
+          >. Para saber cómo Google usa la información de los sitios que usan
+          sus servicios, visita
+          <a
+            href="https://policies.google.com/technologies/partner-sites"
+            target="_blank"
+            rel="noopener noreferrer"
+            >policies.google.com/technologies/partner-sites</a
+          >. En los lugares donde corresponde, te pediremos tu consentimiento
+          antes de mostrar anuncios personalizados.
+        </p>
+
+        <h2>8. Cuánto tiempo guardamos los datos</h2>
+        <p>
+          Los datos de los recibos se conservan mientras sigan siendo útiles
+          para la comunidad. Puedes pedir que eliminemos uno o más recibos (ver
+          sección 9). Los datos de tu dispositivo se borran cuando borras los
+          datos del sitio en tu navegador o desinstalas la app.
+        </p>
+
+        <h2>9. Tus derechos y cómo ejercerlos</h2>
+        <p>
+          Según la ley que te aplique, puedes pedir acceso, corrección o
+          eliminación de tus datos. Como no tenemos tu nombre ni tu correo en la
+          base de datos, para ubicar un recibo necesitamos algunos detalles: el
+          comercio, la fecha aproximada y algún producto. Escríbenos desde la
+          página de <a href="contacto.html">Contacto</a>.
+        </p>
+
+        <h2>10. Menores de edad</h2>
+        <p>
+          Compara Precios no está dirigida a menores de 18 años y no recopilamos
+          datos de ellos de forma intencional.
+        </p>
+
+        <h2>11. Seguridad</h2>
+        <p>
+          Usamos conexiones cifradas (HTTPS) y reglas de acceso en la base de
+          datos que limitan qué se puede leer y escribir. Ningún sistema es
+          completamente seguro, pero cuidamos lo que tratamos.
+        </p>
+
+        <h2>12. Cambios en esta política</h2>
+        <p>
+          Podemos actualizar esta política. Publicaremos la nueva versión en
+          esta misma página, con su fecha de actualización.
+        </p>
+        <a class="btn-3d primary-btn" href="./">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver a la
+          app
+        </a>
+      </article>
+
+      <nav class="site-links" aria-label="Información del sitio">
+        <a href="acerca.html">Acerca de</a>
+        <a href="contacto.html">Contacto</a>
+        <a href="privacidad.html" aria-current="page">Privacidad</a>
+      </nav>
+    </main>
+  </body>
+</html>

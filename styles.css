@@ -1179,186 +1179,126 @@ img {
 }
 
 /* ========================================== */
-/* 15. PANTALLA DE INICIO Y PUBLICIDAD        */
+/* 15. ENLACES, PÁGINAS INFORMATIVAS Y ANUNCIOS */
 /* ========================================== */
-:root {
-  --dash-card-height: 8.75rem; /* misma altura para los botones y los espacios de anuncios */
-}
-
-.dash-card {
-  height: var(--dash-card-height);
-  padding: 1rem 0.75rem;
-  overflow: hidden;
-}
-
-.ad-zone {
-  grid-column: 1 / -1;
-  position: relative;
-}
-
-/* Móvil: carrusel que se desliza */
-.ad-track {
+.site-links {
   display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  border-radius: var(--border-radius);
-}
-
-.ad-track::-webkit-scrollbar {
-  display: none;
-}
-
-.ad-slot {
-  position: relative;
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  height: var(--dash-card-height);
-  display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 0.2rem;
-  padding: 1rem 1.1rem;
-  border: none;
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow-light);
-  color: #ffffff;
-  font: inherit;
-  text-align: left;
+  gap: 0.2rem 1.1rem;
+  margin: 1.75rem 0 1rem;
+  font-size: 0.85rem;
+}
+
+.site-links a {
+  padding: 0.4rem 0.2rem;
+  color: var(--text-muted);
   text-decoration: none;
-  overflow: hidden;
 }
 
-button.ad-slot,
-a.ad-slot {
-  cursor: pointer;
+.site-links a:hover,
+.site-links a[aria-current="page"] {
+  color: var(--accent-text);
+  text-decoration: underline;
 }
 
-.ad-theme-teal {
-  background: linear-gradient(135deg, #00a8cc, #0d3b66);
-}
-
-.ad-theme-blue {
-  background: linear-gradient(135deg, #1f6fb5, #0d3b66);
-}
-
-.ad-theme-green {
-  background: linear-gradient(135deg, #1b9a59, #0d3b66);
-}
-
-.ad-slot.ad-image {
-  padding: 0;
-  background: #ffffff;
-}
-
-.ad-slot.ad-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.ad-tag {
-  position: absolute;
-  top: 0.45rem;
-  right: 0.6rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 0.4rem;
-  background: rgba(0, 0, 0, 0.3);
+a.logo-container {
   color: #ffffff;
-  font-size: 0.65rem;
-  letter-spacing: 0.06rem;
-  text-transform: uppercase;
+  text-decoration: none;
 }
 
-.ad-title {
-  padding-right: 4.5rem;
-  font-size: 1.02rem;
-  font-weight: 800;
+.header-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.03rem;
   line-height: 1.2;
 }
 
-.ad-text {
-  font-size: 0.82rem;
-  line-height: 1.3;
+/* Páginas Acerca de, Contacto y Privacidad */
+.legal-page {
+  max-width: 48rem;
+  margin: 0 auto 1.25rem;
+  padding: 1.5rem 1.35rem 1.75rem;
+  line-height: 1.65;
 }
 
-.ad-cta {
-  align-self: flex-start;
-  margin-top: 0.35rem;
-  padding: 0.28rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-radius: 2rem;
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 0.8rem;
-  font-weight: 700;
+.legal-page h1 {
+  margin-bottom: 0.4rem;
+  font-size: 1.6rem;
+  line-height: 1.25;
+  color: var(--primary-blue);
 }
 
-.ad-dots {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0.5rem;
+.legal-page h2 {
+  margin: 1.6rem 0 0.5rem;
+  font-size: 1.15rem;
+  color: var(--primary-blue);
+}
+
+.legal-page p {
+  margin-bottom: 0.8rem;
+}
+
+.legal-page ul,
+.legal-page ol {
+  margin: 0 0 1rem 1.3rem;
+}
+
+.legal-page li {
+  margin-bottom: 0.4rem;
+}
+
+.legal-page a {
+  color: var(--accent-text);
+}
+
+.legal-page .btn-3d {
+  margin-top: 1.25rem;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.legal-lead {
+  font-size: 1.08rem;
+}
+
+.legal-updated {
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.legal-contact-box {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(0, 168, 204, 0.25);
+  border-radius: 0.9rem;
+  background: rgba(0, 168, 204, 0.06);
+  font-size: 1.05rem;
+}
+
+/* Anuncios (Google AdSense): con etiqueta y bastante aire, lejos de botones y navegación */
+.ad-wrap {
+  margin: 2rem 0;
+  text-align: center;
+}
+
+.ad-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.06rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ad-box {
   display: flex;
   justify-content: center;
-  gap: 0.4rem;
-  pointer-events: none;
+  min-height: 250px; /* altura exacta del bloque 300 x 250: evita saltos al cargar */
 }
 
-.ad-dot {
-  position: relative;
-  width: 0.45rem;
-  height: 0.45rem;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.55);
-  pointer-events: auto;
-  cursor: pointer;
-  transition: var(--transition-speed);
-}
-
-/* Zona táctil más grande que el punto */
-.ad-dot::after {
-  content: "";
-  position: absolute;
-  inset: -0.6rem;
-}
-
-.ad-dot.active {
-  width: 1.1rem;
-  border-radius: 0.3rem;
-  background: #ffffff;
-}
-
-@media (max-width: 767.98px) {
-  /* "Escanear" ocupa todo el ancho; lista y consulta van lado a lado */
-  .dashboard-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .dash-scan {
-    grid-column: 1 / -1;
-  }
-
-  .dash-card span {
-    font-size: 0.95rem;
-    line-height: 1.25;
-  }
-}
-
-@media (min-width: 768px) {
-  /* Tablet y PC: tres anuncios fijos debajo de los tres botones */
-  .ad-track {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-    overflow: visible;
-    scroll-snap-type: none;
-  }
-
-  .ad-dots {
-    display: none;
-  }
+/* Si AdSense no tiene anuncio para mostrar, no queda un hueco vacío */
+.ad-wrap:has(ins.adsbygoogle[data-ad-status="unfilled"]) {
+  display: none;
 }
