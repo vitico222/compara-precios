@@ -1,0 +1,2 @@
+Cuando compres tu dominio: cambia url en site-config.js y la dirección en robots.txt y sitemap.xml, y solicita AdSense con el dominio definitivo, para no repetir la aprobación. Cuando te aprueben, rellenas ads.js con tu ID de editor y los dos bloques de 300 × 250, y dejas ADSENSE_TEST_MODE en true mientras pruebas. AdSense también te pedirá un archivo ads.txt en la raíz del dominio, que prepararé contigo con tu ID real.
+
