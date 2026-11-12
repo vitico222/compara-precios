@@ -29,7 +29,7 @@ const SETTINGS = {
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
   // Debe terminar en «-ai» (compara-precios-ai); «-ia» era el Worker antiguo, ya borrado.
   analyzeEndpoint: "https://compara-precios-ai.vitico222.workers.dev",
-  analyzeTimeoutMs: 60000,
+  analyzeTimeoutMs: 110000, // un ticket largo puede tardar ~40 s por intento
   maxImageSide: 1600, // px: las fotos de móvil se reducen antes de enviarse
   jpegQuality: 0.8,
   fuseThreshold: 0.35,
@@ -39,7 +39,7 @@ const SETTINGS = {
   searchDebounceMs: 350,
   compareDays: 30, // comparación de un recibo recién escaneado
   listDays: 90, // lista inteligente: hay pocos datos, se aceptan registros más antiguos
-  communityKeyScan: 150, // cuántos recibos recientes se leen para conocer los nombres de productos
+  communityKeyScan: 300, // recibos recientes que se leen: dan los nombres de productos y los precios destacados
   communityFuseThreshold: 0.25, // más bajo = exige nombres más parecidos
 };
 
@@ -58,7 +58,7 @@ const SCOPE_LABELS = {
   country: "en tu país",
 };
 
-const VALID_VIEWS = ["home", "scan", "compare", "list", "search"];
+const VALID_VIEWS = ["home", "scan", "compare", "list", "search", "top"];
 
 /* ========================================== */
 /* 2. UTILIDADES                              */
@@ -321,11 +321,12 @@ function switchView(viewId, { push = true } = {}) {
     }
   }
   window.scrollTo({ top: 0 });
+  if (viewId === "top") renderTopView();
 }
 
 function showInitialView() {
   const hash = location.hash.replace("#", "");
-  switchView(["scan", "list", "search"].includes(hash) ? hash : "home", {
+  switchView(["scan", "list", "search", "top"].includes(hash) ? hash : "home", {
     push: false,
   });
 }
@@ -671,11 +672,56 @@ function processReceiptItems(items) {
 }
 
 // Animación translúcida sobre la foto mientras la IA lee el ticket
+let scanHintTimers = [];
+let screenWakeLock = null;
+
+// Evita que la pantalla se apague mientras se analiza (si se apaga, la conexión puede cortarse)
+async function keepScreenOn(on) {
+  try {
+    if (on && "wakeLock" in navigator) {
+      screenWakeLock = await navigator.wakeLock.request("screen");
+    } else if (!on && screenWakeLock) {
+      await screenWakeLock.release();
+      screenWakeLock = null;
+    }
+  } catch {
+    screenWakeLock = null; // no es imprescindible: el análisis sigue igual
+  }
+}
+
 function setAnalyzing(on) {
   const overlay = $("scan-overlay");
   if (overlay) overlay.classList.toggle("hidden", !on);
   const changePhoto = $("btn-remove-image");
   if (changePhoto) changePhoto.disabled = on;
+
+  scanHintTimers.forEach(clearTimeout);
+  scanHintTimers = [];
+  const label = $("scan-label-text");
+  if (label) label.textContent = "Analizando recibo";
+  keepScreenOn(on);
+
+  if (on) {
+    setScanStatus(
+      "Mantén la pantalla encendida mientras analizamos tu ticket.",
+    );
+    if (label) {
+      scanHintTimers.push(
+        setTimeout(
+          () =>
+            (label.textContent =
+              "Los tickets largos pueden tardar hasta 40 segundos"),
+          10000,
+        ),
+      );
+      scanHintTimers.push(
+        setTimeout(
+          () => (label.textContent = "Casi listo, un momento más"),
+          40000,
+        ),
+      );
+    }
+  }
 }
 
 async function processReceiptWithGemini() {
@@ -697,7 +743,6 @@ async function processReceiptWithGemini() {
   btn.innerHTML =
     '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Analizando ticket con IA...';
   btn.disabled = true;
-  setScanStatus("");
   setAnalyzing(true);
 
   try {
@@ -786,10 +831,14 @@ const offersCache = new Map();
 // reconocer que "cer flips dulce de leche bo" (una tienda) y "cer flips dulce de leche
 // bolsa" (otra) son el mismo producto. Se carga una vez por sesión y se reutiliza.
 const communityKeyIndex = { promise: null, loadedAt: 0 };
+// Recibos recientes de la comunidad: se leen una sola vez y sirven para el índice de nombres
+// de producto y para los precios destacados de la semana.
+const communityData = { promise: null, loadedAt: 0 };
 
 function clearOffersCache() {
   offersCache.clear();
   communityKeyIndex.promise = null;
+  communityData.promise = null;
 }
 
 // Medidas y presentaciones del nombre (500g, 1kg, 1.5l, x6): dos productos con medidas
@@ -806,6 +855,54 @@ function measuresCompatible(a, b) {
   return !ma || !mb || ma === mb;
 }
 
+function loadCommunityReceipts() {
+  const fresh =
+    communityData.promise && Date.now() - communityData.loadedAt < 300000;
+  if (fresh) return communityData.promise;
+
+  communityData.loadedAt = Date.now();
+  communityData.promise = (async () => {
+    try {
+      await ensureAuth();
+      const snapshot = await db
+        .collection("community_receipts")
+        .orderBy("createdAt", "desc")
+        .limit(SETTINGS.communityKeyScan)
+        .get();
+      return snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          userId: data.userId || "",
+          createdMs:
+            data.createdAt && typeof data.createdAt.toMillis === "function"
+              ? data.createdAt.toMillis()
+              : 0,
+          country: data.country,
+          currency: data.currency,
+          cityKey: data.cityKey || "",
+          stateKey: data.stateKey || "",
+          city: data.city || "",
+          state: data.state || "",
+          establishment: data.establishment || "",
+          address: data.address || "",
+          date: data.date || "",
+          itemKeys: Array.isArray(data.itemKeys) ? data.itemKeys : [],
+          items: Array.isArray(data.items) ? data.items : [],
+        };
+      });
+    } catch (error) {
+      console.warn(
+        "No se pudieron leer los recibos recientes de la comunidad:",
+        error,
+      );
+      communityData.promise = null;
+      showToast("No se pudieron cargar los datos de la comunidad.");
+      return [];
+    }
+  })();
+  return communityData.promise;
+}
+
 function loadCommunityKeyIndex() {
   const fresh =
     communityKeyIndex.promise &&
@@ -815,23 +912,15 @@ function loadCommunityKeyIndex() {
   communityKeyIndex.loadedAt = Date.now();
   communityKeyIndex.promise = (async () => {
     try {
-      await ensureAuth();
-      const snapshot = await db
-        .collection("community_receipts")
-        .orderBy("createdAt", "desc")
-        .limit(SETTINGS.communityKeyScan)
-        .get();
+      const receipts = await loadCommunityReceipts();
       const keys = new Set();
-      snapshot.forEach((doc) => {
-        const data = doc.data();
+      receipts.forEach((receipt) => {
         if (
-          data.country !== AppState.country ||
-          data.currency !== AppState.currency
+          receipt.country !== AppState.country ||
+          receipt.currency !== AppState.currency
         )
           return;
-        (Array.isArray(data.itemKeys) ? data.itemKeys : []).forEach((key) =>
-          keys.add(key),
-        );
+        receipt.itemKeys.forEach((key) => keys.add(key));
       });
       if (typeof Fuse === "undefined") return null;
       return new Fuse(
@@ -1311,10 +1400,17 @@ const priceDetails = new Map();
 let priceDetailCounter = 0;
 let priceModalOpener = null;
 
-function registerPriceDetail(detail) {
+function registerPriceDetail(detail, group = "") {
   const id = `d${++priceDetailCounter}`;
-  priceDetails.set(id, detail);
+  priceDetails.set(id, { ...detail, group });
   return id;
+}
+
+// Cada pantalla (search, list, top) borra solo sus propios detalles al volver a dibujarse
+function clearPriceDetails(group) {
+  [...priceDetails].forEach(([id, detail]) => {
+    if (detail.group === group) priceDetails.delete(id);
+  });
 }
 
 const storeLabel = (offer) =>
@@ -1525,7 +1621,7 @@ function bestOfferStatusHtml(best, info) {
 }
 
 async function optimizeShoppingList() {
-  priceDetails.clear();
+  clearPriceDetails("list");
   if (AppState.shoppingList.length === 0) return;
   if (!hasRegionConfig()) {
     openRegionalModal();
@@ -1573,14 +1669,17 @@ async function optimizeShoppingList() {
         row.info.tier > 0 &&
         row.best.offer.key !== row.plan.interpreted;
       const detailId = row.best
-        ? registerPriceDetail({
-            title: row.title,
-            offers: row.info.pool,
-            scope: row.best.scope,
-            basic: Boolean(
-              standardProductCatalog.find((p) => p.name === row.title)?.basic,
-            ),
-          })
+        ? registerPriceDetail(
+            {
+              title: row.title,
+              offers: row.info.pool,
+              scope: row.best.scope,
+              basic: Boolean(
+                standardProductCatalog.find((p) => p.name === row.title)?.basic,
+              ),
+            },
+            "list",
+          )
         : "";
       html += resultCardHtml(
         row.title,
@@ -1615,7 +1714,7 @@ async function runProductSearch() {
   const container = $("search-results-container");
   const query = $("product-search-input").value.trim();
   const token = ++searchToken;
-  priceDetails.clear();
+  clearPriceDetails("search");
 
   if (query.length < 2) {
     container.innerHTML =
@@ -1672,12 +1771,15 @@ async function runProductSearch() {
       `${basicNames.has(name) ? "★ Canasta básica · " : ""}${offers.length} registro(s) · ${SCOPE_LABELS[scope]}`,
       `📍 Mejor precio: <strong>${escapeHtml(formatMoney(best.price))}</strong> c/u en ${escapeHtml(storeLabel(best))}`,
       "",
-      registerPriceDetail({
-        title: name,
-        offers: offers.map((offer) => ({ ...offer, key: name })),
-        scope,
-        basic: basicNames.has(name),
-      }),
+      registerPriceDetail(
+        {
+          title: name,
+          offers: offers.map((offer) => ({ ...offer, key: name })),
+          scope,
+          basic: basicNames.has(name),
+        },
+        "search",
+      ),
     );
   });
   if (rows.length >= 2 && rows.length <= 3) html += adBlockHtml("search"); // pocos resultados: al final
@@ -1764,6 +1866,224 @@ function mountAds(container) {
 }
 
 /* ========================================== */
+/* 12 ter. PRECIOS DESTACADOS DE LA SEMANA    */
+/* ========================================== */
+// El cálculo está en top-prices.js. Aquí solo se dibuja la pantalla.
+let topState = { category: "all", result: null };
+let topRenderToken = 0;
+
+const prefersReducedMotion = () =>
+  Boolean(
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+function topPlaceLabel(scope) {
+  if (scope === "city") return AppState.city;
+  if (scope === "state") return AppState.state;
+  return "tu país";
+}
+
+function topIconHtml(category, size = "") {
+  return `<span class="top-icon${size ? ` ${size}` : ""}"><i class="fa-solid ${topIconFor(category)}" aria-hidden="true"></i></span>`;
+}
+
+function topStoreLine(offer) {
+  const place =
+    offer.city && normalizePlace(offer.city) !== normalizePlace(AppState.city)
+      ? ` · ${offer.city}`
+      : "";
+  return `${storeLabel(offer)}${place}`;
+}
+
+function topSavingPill(item, compact = false) {
+  const pct = Math.round(item.saving * 100);
+  return `<span class="saving-pill${compact ? " sm" : ""}">−<span class="count-up" data-to="${pct}">${pct}</span> %${
+    compact ? "" : " bajo el promedio"
+  }</span>`;
+}
+
+// Barra sin imágenes: el relleno es este precio y la marca es el promedio de la zona
+function topBarHtml(item) {
+  const scale = item.mean * 1.3;
+  const fill = Math.min(100, (item.bestPrice / scale) * 100).toFixed(1);
+  const mark = Math.min(100, (item.mean / scale) * 100).toFixed(1);
+  return `<div class="avg-bar" style="--fill:${fill}%;--mark:${mark}%"><span class="avg-bar-fill"></span><span class="avg-bar-mark"></span></div>
+    <div class="avg-legend"><span>Este precio</span><span>Promedio de la zona</span></div>`;
+}
+
+function topFirstCardHtml(item, detailId) {
+  const name = prettyProductName(item.key);
+  return `<article class="top-card top-first" role="button" tabindex="0" data-detail="${escapeHtml(detailId)}" aria-label="${escapeHtml(`Puesto 1: ${name}`)}">
+    <div class="top-card-head">
+      <span class="rank-badge">1</span>
+      <div class="top-card-title"><h3>${escapeHtml(name)}</h3><p>${escapeHtml(topStoreLine(item.best))}</p></div>
+      ${topIconHtml(item.category)}
+    </div>
+    <div class="top-card-price"><span class="top-price">${escapeHtml(formatMoney(item.bestPrice))}</span><small>c/u</small></div>
+    ${topSavingPill(item)}
+    ${topBarHtml(item)}
+    <div class="top-meta">${item.count} registros · ${item.storeCount} comercios · ${escapeHtml(daysAgoLabel(item.best.date))}</div>
+    ${item.basic ? '<span class="top-basic">★ Canasta básica</span>' : ""}
+  </article>`;
+}
+
+function topSmallCardHtml(item, rank, detailId) {
+  const name = prettyProductName(item.key);
+  return `<article class="top-card top-small ${rank === 2 ? "top-second" : "top-third"}" role="button" tabindex="0" data-detail="${escapeHtml(detailId)}" aria-label="${escapeHtml(`Puesto ${rank}: ${name}`)}">
+    <div class="top-small-head"><span class="rank-badge sm">${rank}</span>${topIconHtml(item.category, "sm")}</div>
+    <h3>${escapeHtml(name)}</h3>
+    <div class="top-price sm">${escapeHtml(formatMoney(item.bestPrice))}</div>
+    ${topSavingPill(item, true)}
+    <p class="top-store">${escapeHtml(topStoreLine(item.best))}</p>
+  </article>`;
+}
+
+function topRowHtml(item, rank, detailId) {
+  const name = prettyProductName(item.key);
+  return `<div class="top-row" role="button" tabindex="0" data-detail="${escapeHtml(detailId)}" aria-label="${escapeHtml(`Puesto ${rank}: ${name}`)}">
+    <span class="top-row-rank">${rank}</span>
+    ${topIconHtml(item.category, "sm")}
+    <span class="top-row-name"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(topStoreLine(item.best))}</small></span>
+    <span class="top-row-price">${escapeHtml(formatMoney(item.bestPrice))}<small class="top-row-saving">−${Math.round(item.saving * 100)} %</small></span>
+  </div>`;
+}
+
+function topEmptyHtml(result) {
+  return `<div class="top-empty card-3d">
+    <div class="top-empty-icon"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></div>
+    <h3>Aún no hay suficientes datos en ${escapeHtml(AppState.city)}</h3>
+    <p>Para destacar un precio necesitamos, esta semana, al menos ${TOP_SETTINGS.minRecords} registros del mismo producto, de ${TOP_SETTINGS.minStores} comercios y ${TOP_SETTINGS.minUsers} personas distintas.</p>
+    <p class="top-empty-count">Recibos de los últimos ${TOP_SETTINGS.days} días en tu ciudad: <strong>${result.cityReceiptCount}</strong></p>
+    <button type="button" class="btn-3d primary-btn" data-view="scan"><i class="fa-solid fa-camera" aria-hidden="true"></i> Subir mi recibo</button>
+  </div>`;
+}
+
+let topDetailIds = [];
+
+function renderTopChips() {
+  const box = $("top-chips");
+  if (!box) return;
+  box.innerHTML = TOP_CATEGORIES.map(
+    (category) =>
+      `<button type="button" class="top-chip" data-top-category="${category.id}" aria-pressed="${category.id === topState.category}">${escapeHtml(category.label)}</button>`,
+  ).join("");
+}
+
+function animateCountUps(root) {
+  root.querySelectorAll(".count-up").forEach((element) => {
+    const target = Number(element.dataset.to);
+    if (!Number.isFinite(target)) return;
+    if (prefersReducedMotion()) {
+      element.textContent = String(target);
+      return;
+    }
+    const started = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / 700);
+      element.textContent = String(
+        Math.round(target * (1 - Math.pow(1 - t, 3))),
+      );
+      if (t < 1) requestAnimationFrame(step);
+    };
+    element.textContent = "0";
+    requestAnimationFrame(step);
+  });
+}
+
+function renderTopContent() {
+  const container = $("top-results-container");
+  const result = topState.result;
+  if (!container || !result) return;
+
+  clearPriceDetails("top");
+  const subtitle = $("top-subtitle");
+
+  if (result.items.length === 0) {
+    if (subtitle)
+      subtitle.textContent = `${AppState.city} · últimos ${TOP_SETTINGS.days} días`;
+    container.innerHTML = topEmptyHtml(result);
+    return;
+  }
+
+  const items = filterTopByCategory(result.items, topState.category).slice(
+    0,
+    8,
+  );
+  if (subtitle) {
+    subtitle.textContent = `${topPlaceLabel(result.scope)} · últimos ${TOP_SETTINGS.days} días · ${items.length} ${
+      items.length === 1 ? "producto" : "productos"
+    }`;
+  }
+
+  const detailFor = (item) =>
+    registerPriceDetail(
+      {
+        title: item.key,
+        offers: item.offers,
+        scope: result.scope,
+        basic: item.basic,
+      },
+      "top",
+    );
+
+  let html = "";
+  if (result.scope !== "city") {
+    html += `<p class="top-scope-note">Aún no hay suficientes datos en ${escapeHtml(AppState.city)}: mostramos los de ${escapeHtml(topPlaceLabel(result.scope))}.</p>`;
+  }
+  if (items.length === 0) {
+    html +=
+      '<p class="section-subtitle">Ningún producto destacado de esta semana pertenece a esa categoría.</p>';
+  } else {
+    html += '<div class="top-podium">';
+    items.slice(0, 3).forEach((item, index) => {
+      html +=
+        index === 0
+          ? topFirstCardHtml(item, detailFor(item))
+          : topSmallCardHtml(item, index + 1, detailFor(item));
+    });
+    html += "</div>";
+    if (items.length > 3) html += adBlockHtml("top");
+    if (items.length > 3) {
+      html += `<div class="top-list">${items
+        .slice(3)
+        .map((item, index) => topRowHtml(item, index + 4, detailFor(item)))
+        .join("")}</div>`;
+    }
+    html += `<p class="top-foot">Basado en ${result.receiptCount} recibos de los últimos ${TOP_SETTINGS.days} días. El promedio se calcula con los registros de la misma zona. Los precios pueden haber cambiado.</p>`;
+  }
+  container.innerHTML = html;
+  mountAds(container);
+  animateCountUps(container);
+}
+
+async function renderTopView() {
+  const container = $("top-results-container");
+  if (!container) return;
+  if (!hasRegionConfig()) {
+    openRegionalModal();
+    return;
+  }
+  const token = ++topRenderToken;
+  const subtitle = $("top-subtitle");
+  if (subtitle)
+    subtitle.textContent = `${AppState.city} · últimos ${TOP_SETTINGS.days} días`;
+  renderTopChips();
+  container.innerHTML =
+    '<div class="top-skeleton"></div><div class="top-skeleton short"></div><div class="top-skeleton"></div>';
+
+  const receipts = await loadCommunityReceipts();
+  if (token !== topRenderToken) return; // se abrió otra vez mientras cargaba
+  topState.result = computeTopPrices(receipts, {
+    country: AppState.country,
+    currency: AppState.currency,
+    cityKey: normalizePlace(AppState.city),
+    stateKey: normalizePlace(AppState.state),
+  });
+  renderTopContent();
+}
+
+/* ========================================== */
 /* 13. EVENTOS E INICIALIZACIÓN               */
 /* ========================================== */
 function initEventListeners() {
@@ -1812,16 +2132,28 @@ function initEventListeners() {
   $("btn-close-alert").addEventListener("click", closeAlertModal);
 
   // Detalle de un precio: tocar una tarjeta lo abre; la X o tocar fuera de la ventana lo cierra
-  ["search-results-container", "optimization-result-container"].forEach(
-    (id) => {
-      const container = $(id);
-      if (!container) return;
-      container.addEventListener("click", (event) => {
-        const card = event.target.closest("[data-detail]");
-        if (card) openPriceDetail(card.dataset.detail);
-      });
-    },
-  );
+  [
+    "search-results-container",
+    "optimization-result-container",
+    "top-results-container",
+  ].forEach((id) => {
+    const container = $(id);
+    if (!container) return;
+    container.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-detail]");
+      if (card) openPriceDetail(card.dataset.detail);
+    });
+  });
+  const topChips = $("top-chips");
+  if (topChips) {
+    topChips.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-top-category]");
+      if (!chip) return;
+      topState.category = chip.dataset.topCategory;
+      renderTopChips();
+      renderTopContent();
+    });
+  }
   const priceModal = $("price-modal");
   if (priceModal) {
     priceModal.addEventListener("click", (event) => {

@@ -25,4 +25,5 @@ const ADSENSE_TEST_MODE = true;
 const ADSENSE_SLOTS = {
   search: "", // ID numérico del bloque 300 x 250 de "Consultar precios"
   list: "", // ID numérico del bloque 300 x 250 de "Lista inteligente"
+  top: "", // ID numérico del bloque 300 x 250 de "Precios destacados" (después del podio)
 };

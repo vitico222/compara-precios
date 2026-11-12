@@ -135,6 +135,16 @@
           >
             Cancelar
           </button>
+          <p class="terms-note">
+            Al continuar aceptas los
+            <a href="terminos.html" target="_blank" rel="noopener"
+              >Términos de uso</a
+            >
+            y la
+            <a href="privacidad.html" target="_blank" rel="noopener"
+              >Política de privacidad</a
+            >.
+          </p>
         </form>
       </div>
     </div>
@@ -199,12 +209,28 @@
             ></i>
             <span>Consultar precios</span>
           </button>
+
+          <!-- Acceso a Precios destacados de la semana -->
+          <button type="button" class="dash-featured" data-view="top">
+            <span class="dash-featured-icon"
+              ><i class="fa-solid fa-star" aria-hidden="true"></i
+            ></span>
+            <span class="dash-featured-text">
+              <strong>Precios destacados de la semana</strong>
+              <span
+                >Los precios más bajos de tu ciudad, con los datos de los
+                últimos 7 días</span
+              >
+            </span>
+            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+          </button>
         </div>
 
         <nav class="site-links" aria-label="Información del sitio">
           <a href="acerca.html">Acerca de</a>
           <a href="contacto.html">Contacto</a>
           <a href="privacidad.html">Privacidad</a>
+          <a href="terminos.html">Términos de uso</a>
         </nav>
       </section>
 
@@ -262,7 +288,8 @@
                 <div class="scan-label">
                   <span class="scan-dot"></span>
                   <span
-                    >Analizando recibo<span class="scan-dots"
+                    ><span id="scan-label-text">Analizando recibo</span
+                    ><span class="scan-dots"
                       ><i>.</i><i>.</i><i>.</i></span
                     ></span
                   >
@@ -423,6 +450,29 @@
           </p>
         </div>
       </section>
+
+      <!-- VISTA 6: PRECIOS DESTACADOS DE LA SEMANA -->
+      <section id="view-top" class="app-view">
+        <div class="view-header-action">
+          <button type="button" data-view="home" class="btn-back">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver al
+            inicio
+          </button>
+        </div>
+
+        <div class="top-hero">
+          <h2>Precios destacados de la semana</h2>
+          <p id="top-subtitle">
+            Los precios más bajos de tu ciudad, últimos 7 días
+          </p>
+        </div>
+        <div
+          id="top-chips"
+          class="top-chips"
+          aria-label="Filtrar por categoría"
+        ></div>
+        <div id="top-results-container" aria-live="polite"></div>
+      </section>
     </main>
 
     <!-- ========================================== -->
@@ -436,6 +486,10 @@
       <button type="button" class="nav-item" data-view="scan">
         <i class="fa-solid fa-camera" aria-hidden="true"></i>
         <span>Escanear</span>
+      </button>
+      <button type="button" class="nav-item nav-featured" data-view="top">
+        <i class="fa-solid fa-star" aria-hidden="true"></i>
+        <span>Destacados</span>
       </button>
       <button type="button" class="nav-item" data-view="list">
         <i class="fa-solid fa-list-check" aria-hidden="true"></i>
@@ -499,6 +553,7 @@
     <script defer src="utils.js"></script>
     <script defer src="catalog-data.js"></script>
     <script defer src="product-search.js"></script>
+    <script defer src="top-prices.js"></script>
     <script defer src="ads.js"></script>
     <script defer src="script.js"></script>
   </body>
