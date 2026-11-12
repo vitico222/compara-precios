@@ -21,8 +21,8 @@
 const TOP_SETTINGS = {
   days: 7,
   minRecords: 3,
-  minStores: 1, //normal es:2
-  minUsers: 1, //normal es: 2
+  minStores: 2, //normal es:2 (está en 1 por periodo de prueba)
+  minUsers: 2, //normal es: 2 (está en 1 por periodo de prueba)
   minSaving: 0.05,
   maxSaving: 0.6,
   outlierLow: 0.4,
