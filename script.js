@@ -584,40 +584,31 @@ function isNonProductLine(name) {
   return (
     /^bolsas?( de (cliente|caja|supermercado|papel)| para embalar| plastica| reutilizable| ecologica)?$/.test(
       clean,
-    ) || /^(redondeo|donacion|propina|servicio)\b/.test(clean)
+    ) ||
+    /^bolsas? (verde|roja|azul|negra|amarilla|blanca|naranja|ecologica|reutilizable|plastica|logo)\b/.test(
+      clean,
+    ) ||
+    /^(redondeo|donacion|propina|servicio)\b/.test(clean)
   );
 }
 
-// Valida y normaliza lo que devuelve la IA antes de usarlo o guardarlo
+// Valida y normaliza lo que devuelve la IA antes de usarlo o guardarlo.
+// Los montos llegan como TEXTO tal cual están impresos y receipt-parse.js decide cómo leerlos
+// (el formato de los números cambia de un ticket a otro) y verifica cada línea.
 function normalizeReceiptData(raw) {
   const list = Array.isArray(raw?.items) ? raw.items : [];
-  const items = list
-    .map((item) => {
-      const name = String(item?.name ?? "")
-        .trim()
-        .slice(0, 120);
-      const rawQty = toNumber(item?.quantity);
-      const quantity = rawQty && rawQty > 0 ? rawQty : 1;
-      const lineTotal = toNumber(item?.line_total ?? item?.lineTotal);
-      let unitPrice = toNumber(
-        item?.unit_price ?? item?.unitPrice ?? item?.price,
-      );
-      // El importe de la derecha del ticket es el dato que la IA lee con más fiabilidad.
-      // Si el precio unitario no cuadra con él (por ejemplo, devolvió el total de la línea
-      // como si fuera el de una sola unidad), se calcula: importe de la línea ÷ cantidad.
-      if (lineTotal !== null && lineTotal > 0) {
-        const fromTotal = lineTotal / quantity;
-        const agrees =
-          unitPrice !== null &&
-          Math.abs(unitPrice - fromTotal) / fromTotal <= 0.02;
-        if (!agrees) unitPrice = fromTotal;
-      }
-      return { name, quantity, unitPrice };
-    })
+  const parsed = parseReceiptLines(
+    list,
+    raw?.subtotal,
+    raw?.total,
+    AppState.country,
+    AppState.currency,
+  );
+  const items = parsed.lines
     .filter(
-      (item) => item.name && item.unitPrice !== null && item.unitPrice > 0,
+      (line) => line.name && line.unitPrice !== null && line.unitPrice > 0,
     )
-    .filter((item) => !isNonProductLine(item.name))
+    .filter((line) => !isNonProductLine(line.name))
     .slice(0, SETTINGS.maxItemsPerReceipt);
 
   if (items.length === 0) {
@@ -630,7 +621,7 @@ function normalizeReceiptData(raw) {
     items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
   );
   // El SUBTOTAL impreso permite detectar productos o precios mal leídos
-  const subtotal = toNumber(raw?.subtotal);
+  const subtotal = parsed.subtotal;
   const subtotalMismatch =
     subtotal !== null &&
     subtotal > 0 &&
@@ -650,7 +641,8 @@ function normalizeReceiptData(raw) {
     itemsSum,
     subtotal,
     subtotalMismatch,
-    total: toNumber(raw?.total) ?? itemsSum,
+    unverifiedCount: items.filter((item) => item.verified === false).length,
+    total: parsed.total ?? itemsSum,
   };
 }
 
@@ -667,9 +659,15 @@ function processReceiptItems(items) {
       productId: match.matched ? match.product.id : null,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
+      verified: item.verified,
     };
   });
 }
+
+// Solo se comparten con la comunidad las líneas cuya cuenta cuadra (o que no se pueden comprobar).
+// Una línea que NO cuadra casi siempre tiene un número mal leído y contaminaría los precios.
+const shareableItems = (receipt) =>
+  receipt.processedItems.filter((item) => item.verified !== false);
 
 // Animación translúcida sobre la foto mientras la IA lee el ticket
 let scanHintTimers = [];
@@ -758,8 +756,14 @@ async function processReceiptWithGemini() {
     clearImagePreview(); // la foto ya se analizó: se libera para el próximo recibo
 
     // 2) Compartir tu recibo con la comunidad
-    const saved = await saveReceiptToCommunity(receipt);
-    if (!saved) showToast("No se pudo compartir tu recibo con la comunidad.");
+    if (shareableItems(receipt).length === 0) {
+      showToast(
+        "No compartimos este recibo: no pudimos verificar sus precios.",
+      );
+    } else {
+      const saved = await saveReceiptToCommunity(receipt);
+      if (!saved) showToast("No se pudo compartir tu recibo con la comunidad.");
+    }
   } catch (error) {
     console.error("Error al procesar el recibo:", error);
     setScanStatus(error.message || "No se pudo procesar el recibo.", true);
@@ -778,7 +782,7 @@ async function saveReceiptToCommunity(receipt) {
     const user = await ensureAuth();
     if (!user) return false;
 
-    const items = receipt.processedItems.map((item) => ({
+    const items = shareableItems(receipt).map((item) => ({
       standardName: item.standardName,
       originalName: item.originalName,
       price: round2(item.unitPrice), // precio por unidad (o por kg)
@@ -1064,14 +1068,18 @@ async function renderParallelTickets(receipt) {
   leftHtml += `<p><strong>Fecha:</strong> ${escapeHtml(receipt.date)}</p><hr class="ticket-divider">`;
   receipt.processedItems.forEach((item) => {
     const label =
-      item.quantity !== 1
+      (item.verified === false ? "⚠ " : "") +
+      (item.quantity !== 1
         ? `${formatQuantity(item.quantity)} x ${item.originalName}`
-        : item.originalName;
+        : item.originalName);
     leftHtml += `<div class="ticket-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(formatMoney(item.unitPrice * item.quantity))}</span></div>`;
   });
   leftHtml += `<hr class="ticket-divider"><p class="ticket-total">TOTAL: ${escapeHtml(formatMoney(receipt.total))}</p>`;
   if (receipt.subtotalMismatch) {
     leftHtml += `<p class="ticket-warning">⚠ La suma de los productos (${escapeHtml(formatMoney(receipt.itemsSum))}) no coincide con el subtotal del ticket (${escapeHtml(formatMoney(receipt.subtotal))}). Puede haber un producto o un precio mal leído.</p>`;
+  }
+  if (receipt.unverifiedCount > 0) {
+    leftHtml += `<p class="ticket-warning">⚠ ${receipt.unverifiedCount} producto(s) no se pudieron verificar (la cantidad por el precio no coincide con el importe). No se compararán ni se compartirán con la comunidad.</p>`;
   }
   leftContainer.innerHTML = leftHtml;
 
@@ -1080,6 +1088,7 @@ async function renderParallelTickets(receipt) {
     '<p class="ticket-hint empty">Buscando los mejores precios...</p>';
   const results = await Promise.all(
     receipt.processedItems.map(async (item) => {
+      if (item.verified === false) return null; // precio dudoso: no se compara
       const similar = await similarCommunityKeys(item.standardName);
       const info = await findBestOffer(
         [item.standardName, ...similar],
@@ -1099,6 +1108,10 @@ async function renderParallelTickets(receipt) {
     let unitFinal = item.unitPrice;
     let hint =
       '<span class="ticket-hint empty">📍 Aún no hay datos para este producto</span>';
+    if (item.verified === false) {
+      hint =
+        '<span class="ticket-hint empty">⚠ Precio sin verificar: no se compara</span>';
+    }
 
     if (result) {
       itemsWithData += 1;

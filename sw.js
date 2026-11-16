@@ -4,7 +4,7 @@
 
 // Sube el número SOLO si cambias la lista de archivos a precargar.
 // El código (HTML, JS, CSS) se actualiza solo: se pide primero a la red.
-const CACHE_NAME = "compara-precios-v7";
+const CACHE_NAME = "compara-precios-v8";
 const CACHE_PREFIX = "compara-precios-";
 const NETWORK_TIMEOUT_MS = 4000;
 
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "./index.html",
   "./styles.css",
   "./utils.js",
+  "./receipt-parse.js",
   "./catalog-data.js",
   "./product-search.js",
   "./top-prices.js",
