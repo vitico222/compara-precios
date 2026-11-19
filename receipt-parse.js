@@ -41,11 +41,35 @@ const DECIMAL_COMMA_COUNTRIES = [
 const defaultAmountFormat = (country) =>
   DECIMAL_COMMA_COUNTRIES.includes(country) ? "ve" : "us";
 
-// Precio típico mínimo de un producto de supermercado en cada moneda. Solo sirve para desempatar
-// cuando todos los montos tienen la forma "5,417" y no hay otra pista: si leerlos de una manera
-// da precios imposibles de tan bajos, esa lectura se descarta. Ajusta estos valores si cambia
-// la moneda (por ejemplo, tras una reconversión).
-const PLAUSIBLE_MEDIAN_MIN = { VES: 50, COP: 500, ARS: 100, CLP: 300 };
+// Rango en el que suele estar el precio MEDIANO de un producto de supermercado en cada moneda
+// [mínimo, máximo]. Sirve para dos cosas: desempatar cuando todos los montos tienen la forma
+// "5,417" y no hay otra pista, y avisar cuando los precios leídos son imposibles (por ejemplo
+// 1.711 Bs en vez de 1.711.00 Bs, un error de escala de 1000). Ajusta estos valores si cambia la
+// moneda (por ejemplo, tras una reconversión).
+const PLAUSIBLE_UNIT_RANGE = {
+  VES: [50, 2000000],
+  COP: [500, 5000000],
+  ARS: [100, 5000000],
+  CLP: [300, 500000],
+  MXN: [5, 5000],
+  PEN: [0.5, 1000],
+  USD: [0.3, 500],
+  EUR: [0.3, 500],
+};
+
+function medianOf(values) {
+  const sorted = values
+    .filter((v) => v !== null && v > 0)
+    .sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+}
+
+const isPlausibleMedian = (median, currency) => {
+  const range = PLAUSIBLE_UNIT_RANGE[currency];
+  return (
+    !range || median === null || (median >= range[0] && median <= range[1])
+  );
+};
 
 // Convierte "1,201", "2.781,70" o "452.22" en número según el formato. Los números se dejan igual.
 function parseAmountWith(value, format) {
@@ -144,25 +168,19 @@ function detectAmountFormat(
   const ve = score("ve");
   if (us !== ve) return us > ve ? "us" : "ve";
 
-  // 3) Empate: se descarta la lectura que da precios imposiblemente bajos
-  const minimum = PLAUSIBLE_MEDIAN_MIN[currency];
-  if (minimum) {
-    const medianUnit = (format) => {
-      const units = rawItems
-        .map((item) =>
+  // 3) Empate: se descarta la lectura que da precios imposibles para esa moneda
+  if (PLAUSIBLE_UNIT_RANGE[currency]) {
+    const medianUnit = (format) =>
+      medianOf(
+        rawItems.map((item) =>
           parseAmountWith(
             item?.unit_price ?? item?.unitPrice ?? item?.price,
             format,
           ),
-        )
-        .filter((value) => value !== null && value > 0)
-        .sort((a, b) => a - b);
-      return units.length ? units[Math.floor(units.length / 2)] : null;
-    };
-    const usMedian = medianUnit("us");
-    const veMedian = medianUnit("ve");
-    const usOk = usMedian !== null && usMedian >= minimum;
-    const veOk = veMedian !== null && veMedian >= minimum;
+        ),
+      );
+    const usOk = isPlausibleMedian(medianUnit("us"), currency);
+    const veOk = isPlausibleMedian(medianUnit("ve"), currency);
     if (usOk !== veOk) return usOk ? "us" : "ve";
   }
   return defaultAmountFormat(country);
@@ -204,7 +222,7 @@ function reconcileLine(quantityRead, unitPrice, lineTotal) {
 
 /**
  * Convierte lo que devolvió la IA (montos como texto) en líneas con números fiables.
- * @returns { format, lines: [{ name, quantity, unitPrice, verified }], subtotal, total }
+ * @returns { format, lines: [{ name, quantity, unitPrice, verified }], scaleSuspect, subtotal, total }
  */
 function parseReceiptLines(rawItems, rawSubtotal, rawTotal, country, currency) {
   const format = detectAmountFormat(
@@ -228,9 +246,15 @@ function parseReceiptLines(rawItems, rawSubtotal, rawTotal, country, currency) {
       ...reconcileLine(parseQuantityText(item?.quantity), unit, total),
     };
   });
+  // ¿Los precios leídos son imposibles para esta moneda? (típico error de escala de 1000)
+  const scaleSuspect = !isPlausibleMedian(
+    medianOf(lines.map((line) => line.unitPrice)),
+    currency,
+  );
   return {
     format,
     lines,
+    scaleSuspect,
     subtotal: parseAmountWith(rawSubtotal, format),
     total: parseAmountWith(rawTotal, format),
   };

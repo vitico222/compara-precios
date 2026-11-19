@@ -24,6 +24,11 @@ if (!firebase.apps.length) {
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+// Versión de la app: se muestra al pie del inicio y se envía al servidor al analizar un recibo.
+// Súbela cada vez que publiques cambios; así, cuando alguien reporte un problema, se sabe qué
+// versión estaba usando.
+const APP_VERSION = "2026.11.13";
+
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
   // No es secreta: la clave de Gemini vive solo dentro del Worker.
@@ -510,6 +515,7 @@ async function requestReceiptAnalysis(dataUrl) {
     mime: mimeType,
     currency: AppState.currency,
     country: AppState.country,
+    cv: APP_VERSION, // el servidor la usa para saber qué tipo de respuesta enviar y la registra
   });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SETTINGS.analyzeTimeoutMs);
@@ -617,6 +623,10 @@ function normalizeReceiptData(raw) {
     );
   }
 
+  // Precios imposibles para la moneda (típico error de escala de 1000): no se confía en ninguno
+  const scaleSuspect = parsed.scaleSuspect || raw?.scale_suspect === true;
+  if (scaleSuspect) items.forEach((item) => (item.verified = false));
+
   const itemsSum = round2(
     items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
   );
@@ -641,6 +651,7 @@ function normalizeReceiptData(raw) {
     itemsSum,
     subtotal,
     subtotalMismatch,
+    scaleSuspect,
     unverifiedCount: items.filter((item) => item.verified === false).length,
     total: parsed.total ?? itemsSum,
   };
@@ -671,6 +682,7 @@ const shareableItems = (receipt) =>
 
 // Animación translúcida sobre la foto mientras la IA lee el ticket
 let scanHintTimers = [];
+let analysisInProgress = false;
 let screenWakeLock = null;
 
 // Evita que la pantalla se apague mientras se analiza (si se apaga, la conexión puede cortarse)
@@ -688,6 +700,7 @@ async function keepScreenOn(on) {
 }
 
 function setAnalyzing(on) {
+  analysisInProgress = on;
   const overlay = $("scan-overlay");
   if (overlay) overlay.classList.toggle("hidden", !on);
   const changePhoto = $("btn-remove-image");
@@ -1078,7 +1091,10 @@ async function renderParallelTickets(receipt) {
   if (receipt.subtotalMismatch) {
     leftHtml += `<p class="ticket-warning">⚠ La suma de los productos (${escapeHtml(formatMoney(receipt.itemsSum))}) no coincide con el subtotal del ticket (${escapeHtml(formatMoney(receipt.subtotal))}). Puede haber un producto o un precio mal leído.</p>`;
   }
-  if (receipt.unverifiedCount > 0) {
+  if (receipt.scaleSuspect) {
+    leftHtml +=
+      '<p class="ticket-warning">⚠ Los precios parecen mal leídos (son demasiado bajos o altos para tu moneda). No se compararán ni se compartirán con la comunidad: vuelve a escanear el ticket.</p>';
+  } else if (receipt.unverifiedCount > 0) {
     leftHtml += `<p class="ticket-warning">⚠ ${receipt.unverifiedCount} producto(s) no se pudieron verificar (la cantidad por el precio no coincide con el importe). No se compararán ni se compartirán con la comunidad.</p>`;
   }
   leftContainer.innerHTML = leftHtml;
@@ -2236,6 +2252,8 @@ function initApp() {
   initEventListeners();
   checkRegionalConfig();
   renderShoppingList();
+  const versionLabel = $("app-version");
+  if (versionLabel) versionLabel.textContent = `Versión ${APP_VERSION}`;
   showInitialView();
   ensureAuth(); // inicia sesión anónima en segundo plano
 }
@@ -2256,6 +2274,13 @@ if ("serviceWorker" in navigator) {
   // Si se instala una versión nueva, recarga una vez para usar los archivos nuevos
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || reloading) return;
+    if (analysisInProgress) {
+      // Recargar ahora cortaría el análisis del recibo
+      showToast(
+        "Hay una versión nueva de la app. Se aplicará al volver a abrirla.",
+      );
+      return;
+    }
     reloading = true;
     window.location.reload();
   });
@@ -2263,7 +2288,14 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./sw.js")
-      .then((reg) => console.log("Service Worker registrado:", reg.scope))
+      .then((reg) => {
+        console.log("Service Worker registrado:", reg.scope);
+        // Una app que queda abierta (o en segundo plano) no busca versiones nuevas por sí sola:
+        // se busca cada vez que vuelve al primer plano.
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) reg.update().catch(() => {});
+        });
+      })
       .catch((err) =>
         console.log("Error al registrar el Service Worker:", err),
       );

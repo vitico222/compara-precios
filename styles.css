@@ -1797,3 +1797,10 @@ a.logo-container {
     order: 3;
   }
 }
+
+.app-version {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
