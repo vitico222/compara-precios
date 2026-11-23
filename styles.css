@@ -1804,3 +1804,18 @@ a.logo-container {
   font-size: 0.7rem;
   color: var(--text-muted);
 }
+
+.scan-privacy {
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.8rem;
+  background: #eaf8fb;
+  color: var(--primary-blue);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.scan-privacy i {
+  margin-right: 0.3rem;
+  color: var(--accent-text);
+}

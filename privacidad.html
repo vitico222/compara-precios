@@ -41,9 +41,12 @@
         <!--
           REVISAR ANTES DE PUBLICAR (esto no se ve en la página):
           1. Verifica que lo que dice aquí coincida con lo que la app hace de verdad.
-          2. Lee los términos vigentes de la API de Gemini: según el plan que uses, Google
-             puede tratar las imágenes de forma distinta (por ejemplo, para mejorar sus
-             productos). Si es así, ajusta la sección 3.
+          2. La sección 3 describe el uso de la cuota GRATUITA de la API de Gemini (según los
+             términos que Google tenía publicados en octubre de 2025: Google puede usar el
+             contenido para mejorar sus productos y personas revisoras pueden leerlo). Si más
+             adelante activas la facturación (plan de pago), reescribe esa sección: en el plan de
+             pago Google no usa el contenido para mejorar sus productos. Vuelve a leer los
+             términos actuales en https://ai.google.dev/gemini-api/terms antes de publicar.
           3. Confirma que las reglas de Firestore estén publicadas (sección 11).
           4. Si no usas AdSense, puedes quitar la sección 7.
         -->
@@ -98,12 +101,31 @@
           La foto se reduce de tamaño en tu dispositivo y se envía a nuestro
           servicio de análisis, alojado en Cloudflare, que la transmite a la API
           de Gemini (Google) para extraer el texto del ticket.
-          <strong>Nosotros no guardamos la foto.</strong> Google la procesa
-          conforme a sus propios términos y a su política de privacidad.
+          <strong>Nosotros no guardamos la foto.</strong>
         </p>
         <p>
-          Procura que en la foto no se vean datos personales, como tu nombre, tu
-          cédula o RIF, o números de tarjeta.
+          <strong>Importante:</strong> usamos la cuota gratuita de la API de
+          Gemini. Según los términos de Google para ese servicio, Google puede
+          usar el contenido que se envía (la imagen y la respuesta) para
+          proporcionar, mejorar y desarrollar sus productos, y personas
+          revisoras pueden leerlo. Google indica que no se deben enviar datos
+          personales o confidenciales a ese servicio.
+        </p>
+        <p>
+          Por eso te pedimos que
+          <strong
+            >tapes o recortes tu nombre, tu cédula o RIF y los datos de
+            tarjetas</strong
+          >
+          antes de fotografiar el recibo. Le indicamos a la IA que no copie
+          datos personales, pero la imagen llega a Google tal como la envías.
+          Puedes consultar cómo trata Google la información en su
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Política de privacidad</a
+          >.
         </p>
 
         <h2>4. Para qué usamos la información</h2>
@@ -188,8 +210,10 @@
 
         <h2>10. Menores de edad</h2>
         <p>
-          Compara Precios no está dirigida a menores de 13 años y no recopilamos
-          datos de ellos de forma intencional.
+          Compara Precios no está dirigida a menores de 18 años y no recopilamos
+          datos de ellos de forma intencional. Esto se debe, en parte, a que el
+          servicio de IA que usamos exige que las aplicaciones que lo utilizan
+          no estén dirigidas a menores de edad.
         </p>
 
         <h2>11. Seguridad</h2>
