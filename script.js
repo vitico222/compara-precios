@@ -27,7 +27,7 @@ const auth = firebase.auth();
 // Versión de la app: se muestra al pie del inicio y se envía al servidor al analizar un recibo.
 // Súbela cada vez que publiques cambios; así, cuando alguien reporte un problema, se sabe qué
 // versión estaba usando.
-const APP_VERSION = "2026.11.13";
+const APP_VERSION = "2026.11.22";
 
 const SETTINGS = {
   // URL de tu Worker de Cloudflare (ver cloudflare/analyze-receipt-worker.js).
@@ -368,6 +368,30 @@ function closeRegionalModal() {
 }
 
 function checkRegionalConfig() {
+  // Si la región guardada es de un país que ya no se ofrece (por ejemplo España), se pide elegirla de nuevo
+  const countrySelect = $("select-country");
+  if (
+    AppState.country &&
+    countrySelect &&
+    !Array.from(countrySelect.options).some(
+      (option) => option.value === AppState.country,
+    )
+  ) {
+    Object.assign(AppState, {
+      country: "",
+      state: "",
+      city: "",
+      currency: "",
+      locationName: "",
+    });
+    [
+      STORAGE.country,
+      STORAGE.state,
+      STORAGE.city,
+      STORAGE.currency,
+      STORAGE.locationName,
+    ].forEach((key) => storageSet(key, ""));
+  }
   if (hasRegionConfig() && !AppState.locationName) {
     AppState.locationName = `${AppState.city}, ${AppState.country}`;
   }

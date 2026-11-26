@@ -1819,3 +1819,37 @@ a.logo-container {
   margin-right: 0.3rem;
   color: var(--accent-text);
 }
+
+/* ========================================== */
+/* 17. PANTALLA DE ESCANEO                    */
+/* ========================================== */
+/* La foto es un bloque centrado (antes era "en línea" y el botón "Cambiar foto" se le
+   acomodaba al lado, dejando todo pegado a la izquierda) */
+.scan-frame {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 1rem;
+}
+
+#image-preview-container .scan-frame img {
+  max-height: min(20rem, 36vh);
+}
+
+#image-preview-container .btn-secondary {
+  display: block;
+  margin: 0 auto;
+}
+
+@media (max-width: 767.98px) {
+  /* El botón de analizar queda siempre a la vista, justo encima del menú inferior */
+  #btn-process-receipt {
+    position: sticky;
+    bottom: calc(4.9rem + var(--safe-bottom));
+    z-index: 5;
+  }
+
+  #view-scan .upload-zone {
+    margin-bottom: 1rem;
+  }
+}

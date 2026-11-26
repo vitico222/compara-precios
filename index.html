@@ -80,7 +80,6 @@
               <option value="CL" data-currency="CLP">Chile</option>
               <option value="MX" data-currency="MXN">México</option>
               <option value="PE" data-currency="PEN">Perú</option>
-              <option value="ES" data-currency="EUR">España</option>
               <option value="US" data-currency="USD">Estados Unidos</option>
             </select>
           </div>
@@ -115,7 +114,6 @@
               <option value="" disabled selected>Selecciona la moneda</option>
               <option value="VES">Bolívar (VES - Bs.)</option>
               <option value="USD">Dólar estadounidense (USD - $)</option>
-              <option value="EUR">Euro (EUR - €)</option>
               <option value="COP">Peso colombiano (COP - $)</option>
               <option value="ARS">Peso argentino (ARS - $)</option>
               <option value="CLP">Peso chileno (CLP - $)</option>
@@ -237,13 +235,6 @@
 
       <!-- VISTA 2: ESCANEAR RECIBO CON IA -->
       <section id="view-scan" class="app-view">
-        <div class="view-header-action">
-          <button type="button" data-view="home" class="btn-back">
-            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver al
-            inicio
-          </button>
-        </div>
-
         <h2>Escanear recibo de compra</h2>
         <p class="section-subtitle">
           Toma una foto del ticket o cárgala desde galería
@@ -303,13 +294,6 @@
           </div>
         </div>
 
-        <p class="scan-privacy">
-          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-          Tu foto se envía a Google (Gemini) para leer el ticket.
-          <strong>Tapa tu nombre, cédula o RIF y tus tarjetas</strong> antes de
-          fotografiar.
-        </p>
-
         <!-- Mensajes de estado y errores (reemplaza a alert()) -->
         <p
           id="scan-status"
@@ -327,6 +311,13 @@
           <i class="fa-solid fa-brain" aria-hidden="true"></i> Analizar recibo
           con IA
         </button>
+
+        <p class="scan-privacy">
+          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+          Tu foto se envía a Google (Gemini) para leer el ticket.
+          <strong>Tapa tu nombre, cédula o RIF y tus tarjetas</strong> antes de
+          fotografiar.
+        </p>
       </section>
 
       <!-- VISTA 3: TICKETS PARALELOS (COMPARACIÓN) -->
